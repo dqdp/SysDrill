@@ -250,9 +250,7 @@ class SessionRuntime:
             review_report = session.get("last_review_report")
             if not isinstance(evaluation_result, dict) or not isinstance(review_report, dict):
                 raise SessionRuntimeInvalidStateError(
-                    "review is not available when session state is '{0}'".format(
-                        session["state"]
-                    )
+                    "review is not available when session state is '{0}'".format(session["state"])
                 )
             return {
                 "session": self.get_session(session_id),

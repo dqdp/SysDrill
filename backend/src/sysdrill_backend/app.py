@@ -6,7 +6,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, NonNegativeInt, StrictStr
 
 from sysdrill_backend.content_bundle_reader import load_topic_catalog
-from sysdrill_backend.content_catalog_api import build_topic_detail, build_topic_summary
+from sysdrill_backend.content_catalog_api import (
+    build_topic_detail,
+    build_topic_summary,
+)
 from sysdrill_backend.session_runtime import (
     SessionNotFoundError,
     SessionRuntime,
@@ -15,7 +18,6 @@ from sysdrill_backend.session_runtime import (
     UnitModeIntentMismatchError,
     UnitNotFoundError,
 )
-
 
 _CONTENT_EXPORT_ROOT_ENV = "SYSDRILL_CONTENT_EXPORT_ROOT"
 _ALLOW_DRAFT_BUNDLES_ENV = "SYSDRILL_ALLOW_DRAFT_BUNDLES"
@@ -173,9 +175,7 @@ def _parse_bool_env(raw_value: str | None, env_name: str) -> bool:
         return True
     if normalized in {"0", "false", "no", "off", ""}:
         return False
-    raise RuntimeError(
-        "environment variable {0} must be a boolean value".format(env_name)
-    )
+    raise RuntimeError("environment variable {0} must be a boolean value".format(env_name))
 
 
 def create_app_from_env(env: Mapping[str, str] | None = None) -> FastAPI:

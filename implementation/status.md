@@ -6,8 +6,10 @@ Implementation has crossed from tooling into a usable read-only backend content 
 
 The importer exporter MVP, content bundle reader, content catalog API, first
 `ExecutableLearningUnit` materialization path, and manual runtime bootstrap are
-complete. The next critical path item is deterministic review output over that
-manual session loop.
+complete. Deterministic review over that manual session loop is also complete,
+and GitHub-native verification plus bounded smoke coverage are now in place.
+The next critical path item is a thin frontend or equivalent demo path over the
+verified backend loop.
 
 ## Prototype target
 
@@ -24,13 +26,13 @@ Recommendation is intentionally not required for the first prototype milestone.
 ## Current active milestone
 
 - `Milestone B. Manual end-to-end prototype`
-- fast-path order: `005 -> 006 -> 008`
+- fast-path order: `005 -> 006 -> 006b -> 008`
 
 ## Current active slice
 
 - roadmap item `008. Practice frontend shell`
 - next code change should connect a thin UI or equivalent demo path to the
-  now-reviewed manual runtime loop
+  now-verified manual runtime loop
 
 ## Completed
 
@@ -152,6 +154,19 @@ Delivered:
   content root is configured
 - regression tests for concurrency, export-root validation, nested nullable
   sections, and bootstrap env behavior
+
+### 006b. GitHub CI and smoke verification
+
+Status:
+- completed in current worktree
+
+Delivered:
+- GitHub Actions workflow for blocking Python verification and bounded smoke
+  checks
+- root `Makefile` command surface for bootstrap, verification, and smoke runs
+- fixture-based importer smoke coverage
+- fixture-based backend manual reviewed loop smoke coverage
+- green local verification for lint, format-check, unit tests, and smoke tests
 
 ## Known risks
 

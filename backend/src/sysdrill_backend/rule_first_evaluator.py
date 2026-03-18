@@ -420,7 +420,9 @@ def _overall_confidence(
         confidence -= min(0.2, 0.05 * len(missing_dimensions))
 
     hint_usage_summary = request["hint_usage_summary"]
-    if hint_usage_summary.get("hint_count", 0) > 0 or hint_usage_summary.get("used_prior_hints", False):
+    if hint_usage_summary.get("hint_count", 0) > 0 or hint_usage_summary.get(
+        "used_prior_hints", False
+    ):
         confidence -= 0.1
     if request.get("answer_reveal_flag", False):
         confidence -= 0.15
@@ -498,13 +500,20 @@ def _review_summary(
 
     missed_dimensions = [_dimension_label(dimension) for dimension in missing_dimensions]
     if missed_dimensions:
-        next_focus_suggestion = "Next, give the answer in three parts: what it is, when to use it, and the main trade-offs."
+        next_focus_suggestion = (
+            "Next, give the answer in three parts: what it is, when to use it, "
+            "and the main trade-offs."
+        )
     else:
-        next_focus_suggestion = "Next, keep the same structure and add one concrete example or boundary case."
+        next_focus_suggestion = (
+            "Next, keep the same structure and add one concrete example or boundary case."
+        )
 
     support_dependence_note = None
     if downstream_signals["hint_dependency"] > 0.0:
-        support_dependence_note = "Support usage lowers confidence in fully independent recall for this attempt."
+        support_dependence_note = (
+            "Support usage lowers confidence in fully independent recall for this attempt."
+        )
 
     return {
         "strengths": strengths,

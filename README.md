@@ -54,3 +54,19 @@ system-design-trainer/
 - frontend: separate TypeScript application
 - Python tooling and backend share a root `.venv`
 - Python verification includes `ruff` plus tests
+
+## Verification
+
+The current repository verification surface is Python-only and runs from the
+root `Makefile`.
+
+- create or refresh the local environment:
+  `make bootstrap-python`
+- run lint, format-check, and unit tests:
+  `make verify-python`
+- run bounded smoke verification for the current importer and backend prototype
+  seams:
+  `make smoke-python`
+
+GitHub CI should use the same command surface after creating a clean `.venv`
+with `Python 3.12`.

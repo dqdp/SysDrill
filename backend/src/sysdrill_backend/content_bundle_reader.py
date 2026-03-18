@@ -12,9 +12,7 @@ def _ensure_safe_export_root(export_root: str | Path) -> Path:
     if ".." in candidate.parts:
         raise BundleLoadError("export root must not escape the configured export root")
     if candidate.is_symlink():
-        raise BundleLoadError(
-            "symlinked export roots are not allowed: {0}".format(candidate)
-        )
+        raise BundleLoadError("symlinked export roots are not allowed: {0}".format(candidate))
 
     resolved = candidate.resolve()
     if not resolved.exists():

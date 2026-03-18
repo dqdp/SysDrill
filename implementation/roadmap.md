@@ -44,13 +44,15 @@ Goal:
 Fast-path execution order:
 1. `005. Session runtime and event log bootstrap`
 2. `006. Rule-first evaluation loop`
-3. `008. Practice frontend shell`
+3. `006b. GitHub CI and smoke verification`
+4. `008. Practice frontend shell`
 
 Expected narrow implementation steps inside this milestone:
 - manual session start over one materialized unit
 - answer submission and deterministic turn closure
 - append-only semantic event persistence
 - deterministic concept-recall review artifact
+- GitHub-native verification plus bounded smoke coverage for the prototype seam
 - thin manual launcher plus answer/review UI
 
 Exit criteria:
@@ -177,6 +179,20 @@ Why now:
 - these are contract-preserving hardening fixes on the critical prototype path
 - closing them before frontend work reduces avoidable demo-path instability
 
+### 006b. GitHub CI and smoke verification
+
+Status:
+- completed
+
+Goal:
+- add GitHub-native verification plus bounded smoke checks for the current
+  backend and importer prototype seam
+
+Why now:
+- the repository has local tests but no GitHub verification workflow yet
+- current prototype work should be protected by a clean-environment install path
+  and a small number of deterministic smoke checks before frontend integration
+
 ### 007. Recommendation placeholder
 
 Status:
@@ -202,7 +218,8 @@ Goal:
 - connect the complex TS frontend to the minimal backend loop
 
 Prototype priority:
-- may start after `006` and before `007` to reach a visible prototype sooner
+- should start after `006b` so the current backend loop is protected by GitHub
+  verification before frontend wiring expands the surface area
 
 Fallback posture:
 - if frontend work starts earlier, it should use explicit manual session launch

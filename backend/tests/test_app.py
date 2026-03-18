@@ -16,9 +16,7 @@ class FastApiAppTest(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
 
     def test_module_level_app_uses_environment_configuration(self):
-        export_root = (
-            os.path.join(os.path.dirname(__file__), "fixtures", "export_root")
-        )
+        export_root = os.path.join(os.path.dirname(__file__), "fixtures", "export_root")
         original_values = {
             "SYSDRILL_CONTENT_EXPORT_ROOT": os.environ.get("SYSDRILL_CONTENT_EXPORT_ROOT"),
             "SYSDRILL_ALLOW_DRAFT_BUNDLES": os.environ.get("SYSDRILL_ALLOW_DRAFT_BUNDLES"),
