@@ -2,15 +2,17 @@
 
 ## Current posture
 
-Implementation is moving from tooling into product runtime integration.
+Implementation has crossed from tooling into a usable read-only backend content surface.
 
-The importer exporter MVP is complete. The next critical path item is reading
-exported bundles inside the backend without introducing a database dependency
-or silently promoting draft tool output into production truth.
+The importer exporter MVP, content bundle reader, and content catalog API
+surface are complete. The next critical path item is materializing bounded
+`ExecutableLearningUnit` shapes without collapsing `Content Kernel` and
+`Learning Design`.
 
 ## Current active slice
 
-- `002_content_bundle_reader.md`
+- roadmap item `004. Executable learning unit materialization`
+- next code change requires a new explicit slice file before implementation
 
 ## Completed
 
@@ -27,6 +29,42 @@ Delivered:
 - materialized export bundles
 - golden tests and real bounded run validation
 
+### 002. Content bundle reader
+
+Status:
+- completed in current worktree
+
+Delivered:
+- deterministic file-based bundle reader in backend
+- explicit draft-ingestion gate
+- fail-closed bundle validation at read time
+- UTF-8-safe loading of exported topic packages
+- stable in-memory topic catalog keyed by `topic_slug`
+
+### 003. Content catalog API surface
+
+Status:
+- completed in current worktree
+
+Delivered:
+- explicit app factory contract for content configuration
+- read-only `GET /content/topics`
+- read-only `GET /content/topics/{topic_slug}`
+- API projection that avoids leaking raw provenance and filesystem paths
+- fail-closed startup on invalid content configuration
+
+### 003a. Content catalog hardening
+
+Status:
+- completed in current worktree
+
+Delivered:
+- fail-closed rejection when a configured export root yields zero topic bundles
+- rejection of symlinked source/topic directories during bundle traversal
+- explicit bundle payload type validation for required YAML/JSON sidecars
+- regression tests for misconfigured roots, symlink traversal, and malformed
+  payloads
+
 ## Known risks
 
 - exported bundles are still review-first artifacts, not approved canonical content
@@ -42,6 +80,6 @@ Delivered:
 
 ## Exit condition for current phase
 
-Phase 1 hand-off is complete when the backend can load exported bundles
-deterministically from disk under explicit draft-ingestion posture and expose
-them to the next implementation slice.
+Phase 3 hand-off is complete when the backend can materialize bounded
+`ExecutableLearningUnit` shapes from loaded content and learning-design inputs
+without bypassing the `Content Kernel -> Learning Design -> Runtime` seam.

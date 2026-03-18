@@ -1,0 +1,84 @@
+package_id: topicpkg.zeta-topic
+topic_slug: zeta-topic
+generated_at: "2026-03-18T16:25:01+00:00"
+tool_version: "0.1.0"
+source_document_ids:
+  - zeta-topic
+canonical_content:
+  concepts:
+    - id:
+        value: concept.zeta-topic
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Load Balancing"
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      description:
+        value: "Балансировка распределяет нагрузку."
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.summary.001]
+            extraction_mode: rule
+            confidence: 0.82
+        review_required: false
+      why_it_matters:
+        value:
+          - "Повышает устойчивость системы."
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      when_to_use:
+        value: []
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      tradeoffs:
+        value: []
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      related_concepts:
+        value: []
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: zeta-topic
+            fragment_ids: [frag.zeta-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+  patterns: []
+  scenarios: []
+canonical_support:
+  hint_ladders: []
+review:
+  status: needs_review
+  required_actions: []
+validation_summary:
+  schema_valid: true
+  errors: []
+  warnings: []

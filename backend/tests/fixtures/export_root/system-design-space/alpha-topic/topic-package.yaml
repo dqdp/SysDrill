@@ -1,0 +1,89 @@
+package_id: topicpkg.alpha-topic
+topic_slug: alpha-topic
+generated_at: "2026-03-18T16:25:01+00:00"
+tool_version: "0.1.0"
+source_document_ids:
+  - alpha-topic
+canonical_content:
+  concepts:
+    - id:
+        value: concept.alpha-topic
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Кэширование"
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      description:
+        value: "Кэш снижает нагрузку и латентность."
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.summary.001]
+            extraction_mode: rule
+            confidence: 0.82
+        review_required: false
+      why_it_matters:
+        value:
+          - "Снижает нагрузку на базу данных."
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      when_to_use:
+        value: []
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      tradeoffs:
+        value: []
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      related_concepts:
+        value: []
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: alpha-topic
+            fragment_ids: [frag.alpha-topic.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+  patterns: []
+  scenarios: []
+canonical_support:
+  hint_ladders: []
+learning_design_drafts:
+  candidate_card_types:
+    - recall
+review:
+  status: needs_review
+  required_actions:
+    - "review low-confidence field: concepts[0].why_it_matters"
+validation_summary:
+  schema_valid: true
+  errors: []
+  warnings:
+    - "no hint ladders were generated"

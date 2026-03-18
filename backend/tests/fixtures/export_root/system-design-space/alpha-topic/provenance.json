@@ -1,0 +1,37 @@
+{
+  "package_id": "topicpkg.alpha-topic",
+  "topic_slug": "alpha-topic",
+  "run_id": "test-run",
+  "source_name": "system-design.space",
+  "source_document_ids": [
+    "alpha-topic"
+  ],
+  "manifest": {
+    "path": "runs/test-run/manifest.json",
+    "seed": "https://system-design.space/chapter/alpha-topic",
+    "profile": "chapters_only"
+  },
+  "documents": [
+    {
+      "document_id": "alpha-topic",
+      "source_name": "system-design.space",
+      "source_url": "https://system-design.space/chapter/alpha-topic",
+      "fetched_at": "2026-03-18T16:25:01+00:00",
+      "fetch_mode": "http_only",
+      "http_status": 200,
+      "content_type": "text/html",
+      "source_hash": "sha256:test-alpha",
+      "raw_html_path": "runs/test-run/documents/alpha-topic/raw.html",
+      "normalized_text_path": "runs/test-run/documents/alpha-topic/normalized.txt",
+      "parser_version": "0.1.0"
+    }
+  ],
+  "artifacts": {
+    "semantic_draft_path": "runs/test-run/drafts/alpha-topic/semantic-draft.json",
+    "validation_report_path": "runs/test-run/reports/alpha-topic/validation-report.json",
+    "draft_topic_package_path": "runs/test-run/packages/alpha-topic/draft-topic-package.json",
+    "fragments_paths": [
+      "runs/test-run/fragments/alpha-topic/fragments.json"
+    ]
+  }
+}

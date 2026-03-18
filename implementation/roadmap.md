@@ -24,7 +24,7 @@ Output:
 ### 002. Content bundle reader
 
 Status:
-- next
+- completed
 
 Goal:
 - load exported topic bundles into the backend from the filesystem
@@ -41,7 +41,7 @@ Guardrail:
 ### 003. Content catalog API surface
 
 Status:
-- pending
+- completed
 
 Goal:
 - expose loaded content through minimal read-only backend endpoints
@@ -50,10 +50,24 @@ Likely endpoints:
 - `GET /content/topics`
 - `GET /content/topics/{slug}`
 
+### 003a. Content catalog hardening
+
+Status:
+- completed
+
+Goal:
+- harden content loading so invalid configured roots and malformed bundles fail
+  closed with explicit errors
+
+Why now:
+- review found narrow correctness gaps in slices 002 and 003
+- closing them now preserves the current startup contract before later runtime
+  slices depend on it
+
 ### 004. Executable learning unit materialization
 
 Status:
-- pending
+- next
 
 Goal:
 - transform loaded content plus learning-design metadata into bounded

@@ -2,7 +2,7 @@
 
 ## Status
 
-- next
+- completed
 
 ## Goal
 
@@ -95,6 +95,11 @@ draft exporter output as approved runtime truth.
 - valid bundles produce a stable in-memory catalog ready for the next API slice
 - reader does not collapse content loading into runtime or learning-design
   responsibilities
+
+## Outcome
+
+- implemented in backend with targeted unit tests and fixture export bundles
+- verified through `make verify-python`
 
 ## Follow-up slice
 
