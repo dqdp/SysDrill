@@ -16,6 +16,12 @@ Input:
 Output:
 - manifest of candidate URLs
 
+Behavior:
+- if the seed is already an allowed chapter URL, it is kept as the only target
+- if the seed is an index page, discovery extracts only path-allowed links
+- `max_pages` is applied after filtering and deduplication
+- for allowed HTTP seeds, discovery also records `robots_policy` in the manifest
+
 Example shape:
 ```text
 importer discover --seed https://system-design.space/ --profile chapters_only
@@ -89,6 +95,29 @@ Example shape:
 importer package --run-id 2026-03-18T15-10-00Z
 ```
 
+### `export`
+
+Input:
+- packaged drafts
+- validation reports
+- fetched source documents
+- discovery manifest
+
+Output:
+- `exports/<source>/<topic>/topic-package.yaml`
+- `exports/<source>/<topic>/provenance.json`
+- `exports/<source>/<topic>/validation-report.json`
+
+Behavior:
+- materializes a downstream-readable bundle outside the run-local artifact tree
+- fails closed if `validation-report.schema_valid = false`
+- preserves pointers back to run artifacts for review and replay
+
+Example shape:
+```text
+importer export --run-id 2026-03-18T15-10-00Z
+```
+
 ### `run`
 
 Input:
@@ -100,6 +129,7 @@ Behavior:
 
 Output:
 - full run artifact directory
+- materialized export bundles
 
 Example shape:
 ```text
@@ -113,7 +143,10 @@ Recommended global flags:
 - `--out-dir`
 - `--profile`
 - `--max-pages`
+- `--timeout-s`
+- `--max-retries`
 - `--rate-limit`
+- `--rate-limit-ms`
 - `--browser-fallback`
 - `--fail-fast`
 

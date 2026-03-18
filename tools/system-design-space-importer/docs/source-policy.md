@@ -33,6 +33,25 @@ Before widening crawl scope, verify:
 
 The importer must support bounded crawl scope and polite rate limiting.
 
+Default bounded HTTP policy:
+- allowed hostnames: `system-design.space`, `www.system-design.space`
+- timeout: `10s`
+- retries: `1`
+- rate limit: `250ms` between HTTP attempts
+- local `file://` fixtures remain allowed for test and development workflows
+
+Robots posture:
+- fetch `robots.txt` for allowed HTTP seeds
+- preserve parsed `crawl-delay` and disallow paths in manifest metadata
+- treat `crawl-delay` as a lower-bound constraint on effective HTTP pacing
+- local `file://` fixtures record `robots_policy = not_applicable_local_file`
+
+Default discovery policy for `chapters_only`:
+- seed may be either a direct chapter URL or a bounded index page
+- only links under `/chapter/` are eligible discovery targets
+- discovered URLs are deduplicated in first-seen order
+- `max_pages` applies after filtering and deduplication
+
 ## Provenance requirements
 
 Every exported draft package must preserve:
@@ -41,6 +60,7 @@ Every exported draft package must preserve:
 - `source_hash`
 - `parser_version`
 - source fragment references for each draft field
+- run-level manifest linkage in the provenance sidecar
 
 Recommended run-level metadata:
 - run id
@@ -48,6 +68,7 @@ Recommended run-level metadata:
 - allowlist rules
 - fetch mode used
 - tool version
+- timeout / retry / rate-limit policy
 
 ## Refresh policy
 

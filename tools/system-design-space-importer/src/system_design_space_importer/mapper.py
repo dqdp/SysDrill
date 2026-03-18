@@ -1,7 +1,6 @@
 from system_design_space_importer import __version__
 from system_design_space_importer.jsonio import read_json, write_json
 from system_design_space_importer.models import draft_field, provenance_ref
-from system_design_space_importer.utils import slugify
 
 
 def _first_fragment(fragments, kind):
@@ -20,7 +19,10 @@ def build_semantic_draft(document_id, fragments):
     summary_fragment = _first_fragment(fragments, "summary")
     section_bodies = _fragments_by_kind(fragments, "section_body")
     title = title_fragment["text"] if title_fragment else document_id.replace("-", " ").title()
-    topic_slug = slugify(title)
+    # Exported topic slugs must remain stable across locales and title variants.
+    # The source URL-derived document_id is the most deterministic identity we
+    # have at importer stage, so we keep it as the canonical draft slug.
+    topic_slug = document_id
 
     description_fragment = summary_fragment or (
         section_bodies[0] if section_bodies else title_fragment

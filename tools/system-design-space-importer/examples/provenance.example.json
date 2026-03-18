@@ -1,0 +1,59 @@
+{
+  "package_id": "topicpkg.event-driven-architecture",
+  "topic_slug": "event-driven-architecture",
+  "run_id": "2026-03-18T15-10-00Z",
+  "source_name": "system-design.space",
+  "source_document_ids": [
+    "event-driven-architecture"
+  ],
+  "manifest": {
+    "path": "runs/2026-03-18T15-10-00Z/manifest.json",
+    "seed": "https://system-design.space/chapter/event-driven-architecture/",
+    "profile": "chapters_only",
+    "fetch_policy": {
+      "allowed_hosts": [
+        "system-design.space",
+        "www.system-design.space"
+      ],
+      "allow_file_scheme": false,
+      "max_retries": 1,
+      "rate_limit_ms": 250,
+      "timeout_s": 10
+    },
+    "discovery_policy": {
+      "allowed_path_prefixes": [
+        "/chapter/"
+      ],
+      "profile": "chapters_only"
+    },
+    "robots_policy": {
+      "crawl_delay_s": 1.0,
+      "disallowed_paths": [],
+      "source": "https://system-design.space/robots.txt",
+      "user_agent": "system-design-space-importer"
+    }
+  },
+  "documents": [
+    {
+      "document_id": "event-driven-architecture",
+      "source_name": "system-design.space",
+      "source_url": "https://system-design.space/chapter/event-driven-architecture/",
+      "fetched_at": "2026-03-18T15:11:00Z",
+      "fetch_mode": "http_only",
+      "http_status": 200,
+      "content_type": "text/html",
+      "source_hash": "sha256:abc123",
+      "raw_html_path": "runs/2026-03-18T15-10-00Z/documents/event-driven-architecture/raw.html",
+      "normalized_text_path": "runs/2026-03-18T15-10-00Z/documents/event-driven-architecture/normalized.txt",
+      "parser_version": "0.1.0"
+    }
+  ],
+  "artifacts": {
+    "semantic_draft_path": "runs/2026-03-18T15-10-00Z/drafts/event-driven-architecture/semantic-draft.json",
+    "validation_report_path": "runs/2026-03-18T15-10-00Z/reports/event-driven-architecture/validation-report.json",
+    "draft_topic_package_path": "runs/2026-03-18T15-10-00Z/packages/event-driven-architecture/draft-topic-package.json",
+    "fragments_paths": [
+      "runs/2026-03-18T15-10-00Z/fragments/event-driven-architecture/fragments.json"
+    ]
+  }
+}

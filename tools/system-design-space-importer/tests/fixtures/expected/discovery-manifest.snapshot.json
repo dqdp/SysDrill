@@ -1,0 +1,38 @@
+{
+  "created_at": "<normalized>",
+  "discovery_policy": {
+    "allowed_path_prefixes": [
+      "/chapter/"
+    ],
+    "canonical_base_url": "https://system-design.space",
+    "deduplicate_urls": true,
+    "profile": "chapters_only"
+  },
+  "fetch_policy": {
+    "allow_file_scheme": true,
+    "allowed_hostnames": [
+      "system-design.space",
+      "www.system-design.space"
+    ],
+    "max_retries": 1,
+    "profile": "chapters_only",
+    "rate_limit_ms": 250,
+    "timeout_s": 10
+  },
+  "profile": "chapters_only",
+  "robots_policy": {
+    "crawl_delay_s": null,
+    "disallow_paths": [],
+    "source_url": null,
+    "status": "not_applicable_local_file",
+    "user_agent": "system-design-space-importer"
+  },
+  "run_id": "<normalized>",
+  "seed": "<normalized>",
+  "urls": [
+    "https://system-design.space/chapter/event-driven-architecture/",
+    "https://system-design.space/chapter/caching-strategies/",
+    "https://system-design.space/chapter/rate-limiter/",
+    "https://system-design.space/chapter/notification-system/"
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "canonical_content": {
+    "concepts": [
+      {
+        "description": {
+          "provenance": [
+            {
+              "confidence": 0.82,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "rule",
+              "fragment_ids": [
+                "frag.event-driven-architecture.summary.001"
+              ]
+            }
+          ],
+          "review_required": false,
+          "value": "Event-driven architecture shifts communication toward immutable domain events, asynchronous consumers, and operational discipline around contracts, idempotency, and observability."
+        },
+        "id": {
+          "provenance": [
+            {
+              "confidence": 0.99,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "rule",
+              "fragment_ids": [
+                "frag.event-driven-architecture.title.001"
+              ]
+            }
+          ],
+          "review_required": false,
+          "value": "concept.event-driven-architecture"
+        },
+        "prerequisites": {
+          "provenance": [
+            {
+              "confidence": 0.55,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "llm_assisted",
+              "fragment_ids": [
+                "frag.event-driven-architecture.summary.001"
+              ],
+              "notes": [
+                "placeholder field requires editorial review"
+              ]
+            }
+          ],
+          "review_required": true,
+          "value": []
+        },
+        "related_concepts": {
+          "provenance": [
+            {
+              "confidence": 0.55,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "llm_assisted",
+              "fragment_ids": [
+                "frag.event-driven-architecture.summary.001"
+              ],
+              "notes": [
+                "placeholder field requires editorial review"
+              ]
+            }
+          ],
+          "review_required": true,
+          "value": []
+        },
+        "title": {
+          "provenance": [
+            {
+              "confidence": 0.99,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "rule",
+              "fragment_ids": [
+                "frag.event-driven-architecture.title.001"
+              ]
+            }
+          ],
+          "review_required": false,
+          "value": "Event-Driven Architecture"
+        },
+        "tradeoffs": {
+          "provenance": [
+            {
+              "confidence": 0.55,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "llm_assisted",
+              "fragment_ids": [
+                "frag.event-driven-architecture.summary.001"
+              ],
+              "notes": [
+                "placeholder field requires editorial review"
+              ]
+            }
+          ],
+          "review_required": true,
+          "value": []
+        },
+        "when_to_use": {
+          "provenance": [
+            {
+              "confidence": 0.55,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "llm_assisted",
+              "fragment_ids": [
+                "frag.event-driven-architecture.summary.001"
+              ],
+              "notes": [
+                "placeholder field requires editorial review"
+              ]
+            }
+          ],
+          "review_required": true,
+          "value": []
+        },
+        "why_it_matters": {
+          "provenance": [
+            {
+              "confidence": 0.55,
+              "document_id": "event-driven-architecture",
+              "extraction_mode": "llm_assisted",
+              "fragment_ids": [
+                "frag.event-driven-architecture.summary.001"
+              ],
+              "notes": [
+                "placeholder field requires editorial review"
+              ]
+            }
+          ],
+          "review_required": true,
+          "value": [
+            "Event-driven architecture shifts communication toward immutable domain events, asynchronous consumers, and operational discipline around contracts, idempotency, and observability."
+          ]
+        }
+      }
+    ],
+    "patterns": [],
+    "scenarios": []
+  },
+  "canonical_support": {
+    "hint_ladders": []
+  },
+  "generated_at": "<generated_at>",
+  "learning_design_drafts": {
+    "candidate_card_types": [
+      "recall"
+    ],
+    "coverage_notes": [
+      "derive at least one recall card after editorial approval",
+      "defer learning-design expansion until canonical content is reviewed"
+    ]
+  },
+  "package_id": "topicpkg.event-driven-architecture",
+  "review": {
+    "required_actions": [
+      "canonical axes were not inferred",
+      "no scenario draft was emitted",
+      "no hint ladders were generated",
+      "review low-confidence field: concepts[0].prerequisites",
+      "review low-confidence field: concepts[0].related_concepts",
+      "review low-confidence field: concepts[0].tradeoffs",
+      "review low-confidence field: concepts[0].when_to_use",
+      "review low-confidence field: concepts[0].why_it_matters"
+    ],
+    "status": "needs_review"
+  },
+  "source_document_ids": [
+    "event-driven-architecture"
+  ],
+  "tool_version": "0.1.0",
+  "topic_slug": "event-driven-architecture",
+  "validation_summary": {
+    "errors": [],
+    "schema_valid": true,
+    "warnings": [
+      "canonical axes were not inferred",
+      "no scenario draft was emitted",
+      "no hint ladders were generated"
+    ]
+  }
+}

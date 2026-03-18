@@ -8,10 +8,7 @@ The product depends on normalized knowledge artifacts, not on the upstream site.
 
 ## Runtime requirement
 
-This tool is fixed to Python `3.12`.
-
-Packaging contract:
-- `>=3.12`
+This tool requires Python `>=3.12`.
 
 ## Scope
 
@@ -21,6 +18,7 @@ The importer is responsible for:
 - extracting structured page fragments
 - mapping fragments into reviewable draft topic packages
 - validating draft outputs before editorial review
+- materializing reviewable export bundles for downstream consumption
 
 The importer is not responsible for:
 - writing directly into runtime databases
@@ -36,6 +34,7 @@ The importer writes file-based draft artifacts only:
 - `SemanticDraft`
 - `DraftTopicPackage`
 - `ValidationReport`
+- exported `topic-package.yaml` bundles with provenance sidecars
 
 These artifacts are reviewed and approved before any downstream materialization
 into `Content Kernel` or `Learning Design` storage.
@@ -48,6 +47,7 @@ into `Content Kernel` or `Learning Design` storage.
 4. `map`
 5. `validate`
 6. `package`
+7. `export`
 
 An optional `run` command may execute the full pipeline end-to-end for a bounded
 set of source URLs.
@@ -63,8 +63,10 @@ set of source URLs.
 
 ## Examples
 
+- [discovery manifest example](./examples/discovery-manifest.example.json)
 - [source document example](./examples/source-document.example.yaml)
 - [parsed fragment example](./examples/parsed-source-fragment.example.yaml)
 - [semantic draft example](./examples/semantic-draft.example.yaml)
 - [draft topic package example](./examples/draft-topic-package.example.yaml)
+- [provenance sidecar example](./examples/provenance.example.json)
 - [validation report example](./examples/validation-report.example.yaml)

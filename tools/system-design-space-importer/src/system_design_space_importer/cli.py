@@ -4,7 +4,7 @@ from system_design_space_importer.discovery import run_discovery
 from system_design_space_importer.extractor import run_extract
 from system_design_space_importer.fetcher import run_fetch
 from system_design_space_importer.mapper import run_map
-from system_design_space_importer.packager import run_package
+from system_design_space_importer.packager import run_export, run_package
 from system_design_space_importer.paths import RunLayout
 from system_design_space_importer.validator import run_validate
 
@@ -20,6 +20,9 @@ def build_parser():
             command_parser.add_argument("--seed", required=True)
             command_parser.add_argument("--profile", default="chapters_only")
             command_parser.add_argument("--max-pages", type=int)
+            command_parser.add_argument("--timeout-s", type=int, default=10)
+            command_parser.add_argument("--max-retries", type=int, default=1)
+            command_parser.add_argument("--rate-limit-ms", type=int, default=250)
 
     discover_parser = subparsers.add_parser("discover")
     add_shared_options(discover_parser, require_seed=True)
@@ -39,6 +42,9 @@ def build_parser():
     package_parser = subparsers.add_parser("package")
     add_shared_options(package_parser)
 
+    export_parser = subparsers.add_parser("export")
+    add_shared_options(export_parser)
+
     run_parser = subparsers.add_parser("run")
     add_shared_options(run_parser, require_seed=True)
 
@@ -50,7 +56,15 @@ def main(argv=None):
     layout = RunLayout(out_dir=args.out_dir, run_id=args.run_id)
 
     if args.command == "discover":
-        run_discovery(layout, seed=args.seed, profile=args.profile, max_pages=args.max_pages)
+        run_discovery(
+            layout,
+            seed=args.seed,
+            profile=args.profile,
+            max_pages=args.max_pages,
+            timeout_s=args.timeout_s,
+            max_retries=args.max_retries,
+            rate_limit_ms=args.rate_limit_ms,
+        )
     elif args.command == "fetch":
         run_fetch(layout)
     elif args.command == "extract":
@@ -61,13 +75,24 @@ def main(argv=None):
         run_validate(layout)
     elif args.command == "package":
         run_package(layout)
+    elif args.command == "export":
+        run_export(layout)
     elif args.command == "run":
-        run_discovery(layout, seed=args.seed, profile=args.profile, max_pages=args.max_pages)
+        run_discovery(
+            layout,
+            seed=args.seed,
+            profile=args.profile,
+            max_pages=args.max_pages,
+            timeout_s=args.timeout_s,
+            max_retries=args.max_retries,
+            rate_limit_ms=args.rate_limit_ms,
+        )
         run_fetch(layout)
         run_extract(layout)
         run_map(layout)
         run_validate(layout)
         run_package(layout)
+        run_export(layout)
     return 0
 
 

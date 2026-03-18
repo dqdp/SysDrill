@@ -30,10 +30,31 @@ Optional fields:
 - `discovered_from`
 - `charset`
 - `locale`
+- `fetch_metadata`
 
 Rules:
 - `source_hash` must reflect normalized main content, not full page chrome
 - failed fetches may be recorded, but may not proceed to extraction
+- HTTP fetches should preserve bounded policy metadata such as timeout, retry,
+  and rate-limit settings
+- effective rate limiting should preserve any stronger `robots.txt` crawl-delay
+  constraint in output metadata
+
+## Discovery manifest
+
+The discovery stage must persist a manifest containing:
+- `run_id`
+- `created_at`
+- `profile`
+- `seed`
+- `urls`
+- `fetch_policy`
+- `discovery_policy`
+- `robots_policy`
+
+Rules:
+- `robots_policy` may be `not_applicable_local_file` for local fixtures
+- index-page discovery should persist only path-allowed, deduplicated URLs
 
 ## ParsedSourceFragment
 
@@ -133,6 +154,45 @@ Rules:
 - package output remains draft until approved
 - learning-design output is optional and advisory in v1
 - review status must be explicit
+
+## ProvenanceSidecar
+
+Represents the audit trail for one exported topic package.
+
+Required fields:
+- `package_id`
+- `topic_slug`
+- `run_id`
+- `source_name`
+- `source_document_ids`
+- `manifest`
+- `documents`
+- `artifacts`
+
+Rules:
+- provenance must preserve run-level discovery and fetch policy metadata
+- provenance must point back to the exact run artifacts used to materialize the
+  exported package
+- documents included in provenance must be the fetched `SourceDocument`
+  artifacts, not a rewritten summary
+
+## Export bundle
+
+Represents the downstream-readable output of the importer.
+
+Required files per topic:
+- `topic-package.yaml`
+- `provenance.json`
+- `validation-report.json`
+
+Recommended path shape:
+- `exports/<source-name>/<topic-slug>/...`
+
+Rules:
+- export is a materialization step over existing run artifacts
+- invalid validation reports must fail closed and block export
+- `topic-package.yaml` should remain human-reviewable
+- sidecar JSON files should remain machine-readable and diff-friendly
 
 ## ValidationReport
 

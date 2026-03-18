@@ -1,0 +1,39 @@
+{
+  "run_id": "run_2026_03_18_151000",
+  "created_at": "2026-03-18T15:10:00+00:00",
+  "profile": "chapters_only",
+  "seed": "https://system-design.space/",
+  "urls": [
+    "https://system-design.space/chapter/event-driven-architecture/",
+    "https://system-design.space/chapter/caching-strategies/",
+    "https://system-design.space/chapter/rate-limiter/"
+  ],
+  "fetch_policy": {
+    "profile": "chapters_only",
+    "allowed_hostnames": [
+      "system-design.space",
+      "www.system-design.space"
+    ],
+    "allow_file_scheme": true,
+    "timeout_s": 10,
+    "max_retries": 1,
+    "rate_limit_ms": 250
+  },
+  "discovery_policy": {
+    "profile": "chapters_only",
+    "allowed_path_prefixes": [
+      "/chapter/"
+    ],
+    "deduplicate_urls": true,
+    "canonical_base_url": "https://system-design.space"
+  },
+  "robots_policy": {
+    "status": "fetched",
+    "source_url": "https://system-design.space/robots.txt",
+    "user_agent": "system-design-space-importer",
+    "crawl_delay_s": 2.0,
+    "disallow_paths": [
+      "/private/"
+    ]
+  }
+}

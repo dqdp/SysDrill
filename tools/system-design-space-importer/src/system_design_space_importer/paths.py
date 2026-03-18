@@ -6,6 +6,7 @@ class RunLayout:
         self.out_dir = Path(out_dir)
         self.run_id = run_id
         self.base_dir = self.out_dir / "runs" / run_id
+        self.exports_dir = self.out_dir / "exports"
         self.documents_dir = self.base_dir / "documents"
         self.fragments_dir = self.base_dir / "fragments"
         self.drafts_dir = self.base_dir / "drafts"
@@ -19,6 +20,7 @@ class RunLayout:
     def ensure_base(self):
         for path in [
             self.base_dir,
+            self.exports_dir,
             self.documents_dir,
             self.fragments_dir,
             self.drafts_dir,

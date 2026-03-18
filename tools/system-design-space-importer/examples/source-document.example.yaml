@@ -13,3 +13,11 @@ source_hash: sha256:6f6baad83d704f17b6b7b86461b4f0a7f99a4d83c75e04c2fca091f472bf
 raw_html_path: runs/2026-03-18T15-10-00Z/documents/event-driven-architecture/raw.html
 normalized_text_path: runs/2026-03-18T15-10-00Z/documents/event-driven-architecture/normalized.txt
 parser_version: v0.1.0
+fetch_metadata:
+  policy_name: chapters_only
+  timeout_s: 10
+  max_retries: 1
+  rate_limit_ms: 250
+  effective_rate_limit_ms: 2000
+  robots_crawl_delay_s: 2.0
+  attempt_count: 1

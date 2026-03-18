@@ -7,6 +7,9 @@ name = "system-design-space-importer"
 version = "0.1.0"
 description = "Importer tool for system-design.space draft topic packages"
 requires-python = ">=3.12"
+dependencies = [
+  "PyYAML>=6.0",
+]
 
 [project.scripts]
 sds-importer = "system_design_space_importer.cli:main"

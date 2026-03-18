@@ -37,6 +37,7 @@ def source_document(
     discovered_from=None,
     charset=None,
     locale=None,
+    fetch_metadata=None,
 ):
     payload = {
         "document_id": document_id,
@@ -58,6 +59,8 @@ def source_document(
         "locale": locale,
     }
     payload.update({key: value for key, value in optional.items() if value is not None})
+    if fetch_metadata is not None:
+        payload["fetch_metadata"] = fetch_metadata
     return payload
 
 

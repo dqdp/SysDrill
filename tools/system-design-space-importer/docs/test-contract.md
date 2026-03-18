@@ -9,11 +9,19 @@ outputs. Tests should prefer replayability and deterministic failure diagnosis.
 
 ### Discovery
 - only allowlisted URLs are discovered
+- only path-allowed URLs are discovered for the active profile
+- index-page discovery preserves first-seen order after deduplication
 - duplicate URLs collapse deterministically
 - disallowed paths are excluded
+- manifest output remains stable enough for snapshot comparison after normalizing
+  volatile fields
 
 ### Fetch
 - successful fetch writes raw and normalized artifacts
+- disallowed HTTP hosts are rejected before network fetch
+- bounded fetch policy is preserved in output metadata
+- temporary HTTP failures may retry only within configured limits
+- stronger `robots.txt` crawl-delay becomes the effective fetch pacing constraint
 - browser fallback is used only when required
 - non-200 or empty-content pages fail closed
 
@@ -39,6 +47,15 @@ outputs. Tests should prefer replayability and deterministic failure diagnosis.
 - package references source document ids
 - validation summary is preserved in output
 
+### Export
+- export writes `topic-package.yaml`, `provenance.json`, and
+  `validation-report.json`
+- exported package remains stable enough for snapshot comparison after
+  normalizing volatile fields
+- `run` includes export materialization
+- invalid validation reports block export
+- provenance sidecar points back to the exact run artifacts used for export
+
 ## Golden-fixture expectations
 
 Keep a small golden corpus of representative upstream pages:
@@ -52,6 +69,7 @@ For each golden fixture, preserve:
 - parsed fragments snapshot
 - expected semantic draft
 - expected validation report
+- expected exported topic package snapshot
 
 ## Regression triggers
 
