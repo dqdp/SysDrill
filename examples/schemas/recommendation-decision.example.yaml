@@ -1,0 +1,43 @@
+decision_id: rec_789
+action_contract_version: v1
+user_id: user_123
+candidate_actions:
+  - mode: study
+    session_intent: SpacedReview
+    target_type: concept
+    target_id: sharding
+    difficulty_profile: guided_light
+    strictness_profile: supportive
+    session_size: 8_cards
+  - mode: practice
+    session_intent: Remediate
+    target_type: skill
+    target_id: tradeoff_articulation
+    difficulty_profile: medium
+    strictness_profile: standard
+    session_size: 1_mini_drill
+  - mode: mock_interview
+    session_intent: ReadinessCheck
+    target_type: scenario
+    target_id: url_shortener
+    difficulty_profile: medium_hard
+    strictness_profile: strict
+    session_size: 1_session
+chosen_action:
+  mode: practice
+  session_intent: Remediate
+  target_type: skill
+  target_id: tradeoff_articulation
+  difficulty_profile: medium
+  strictness_profile: standard
+  session_size: 1_mini_drill
+  delivery_profile: text_first
+input_features:
+  repeated_low_tradeoff_score: true
+  recent_hint_dependency: medium
+  concept_recall_stable: true
+rationale: >
+  Пользователь показывает приемлемый recall по базовым concept cards, но повторно
+  не раскрывает trade-offs в сценарных ответах. Следующий лучший шаг —
+  Practice + Remediate по skill.tradeoff_articulation через bounded mini-drill.
+created_at: 2026-03-17T10:45:00Z

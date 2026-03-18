@@ -1,0 +1,25 @@
+id: concept.caching
+title: Caching
+description: >
+  Хранение часто запрашиваемых данных ближе к точке чтения для снижения latency
+  и разгрузки downstream systems.
+why_it_matters:
+  - reduces read latency
+  - lowers backend load
+when_to_use:
+  - read-heavy workloads
+  - repeated access patterns
+tradeoffs:
+  - stale data risk
+  - cache invalidation complexity
+related_concepts:
+  - replication
+  - cdn
+  - load_balancing
+prerequisites:
+  - consistency_basics
+examples:
+  - api_response_cache
+  - page_cache
+anti_patterns:
+  - caching everything without invalidation strategy

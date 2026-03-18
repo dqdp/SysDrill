@@ -1,0 +1,22 @@
+id: scenario.url_shortener
+title: Design a URL Shortener
+prompt: >
+  Спроектируй сервис сокращения URL с учётом большого числа чтений,
+  редких записей и требований к высокой доступности.
+content_difficulty_baseline: medium
+expected_focus_areas:
+  - id_generation
+  - storage_choice
+  - read_scaling
+  - caching
+canonical_axes:
+  - read_write_ratio
+  - redirect_latency
+  - collision_avoidance
+hidden_constraints:
+  - abuse prevention
+  - analytics optionality
+canonical_follow_up_candidates:
+  - Как ты будешь генерировать короткие идентификаторы?
+  - Что изменится при резком росте write traffic?
+  - Где здесь нужен cache, а где он создаёт риск?

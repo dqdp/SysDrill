@@ -1,0 +1,17 @@
+event_id: evt_0001
+event_type: answer_submitted
+user_id: user_123
+session_id: sess_456
+mode: practice
+session_intent: Remediate
+content_id: scenario_family.delivery_semantics
+occurred_at: 2026-03-17T10:25:00Z
+source: web
+trace_id: trace_abc
+payload:
+  response_modality: text
+  char_count: 482
+  response_latency_ms: 54000
+  submission_kind: manual_submit
+  used_prior_hints: true
+  follow_up_context: false

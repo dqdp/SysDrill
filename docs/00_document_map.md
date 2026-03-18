@@ -1,0 +1,70 @@
+# Document Map
+
+**Current status:** `v2.2` is the implementation baseline. See `docs/00_implementation_baseline_v2.2.md`.
+
+This file is the human-readable map of the package. For authoritative ownership by topic, use `docs/00_source_of_truth_map.md`.
+
+## Entry points
+- `README.md` — short repository overview
+- `AGENTS.md` — operating contract for implementation agents
+- `docs/00_release_notes.md` — release history of the package
+- `docs/00_source_of_truth_map.md` — authoritative ownership by question
+- `docs/00_agent_invariants.md` — non-negotiable architectural constraints
+- `docs/00_change_protocol.md` — how to change the package safely
+
+## Core framing
+- `docs/00_fpf_application.md` — how FPF ideas are applied to this project
+
+## Product docs
+- `docs/01_product/product_mission_and_scope.md`
+- `docs/01_product/personas_and_skill_model.md`
+
+## Domain docs
+- `docs/02_domain/bounded_context_map.md`
+- `docs/02_domain/domain_model.md`
+- `docs/02_domain/hand_off_contracts.md`
+- `docs/02_domain/learning_design_boundary.md`
+
+## Architecture docs
+- `docs/03_architecture/target_architecture_v1.md`
+- `docs/03_architecture/session_runtime.md`
+- `docs/03_architecture/session_runtime_state_machine_v1.md`
+- `docs/03_architecture/interaction_event_model.md`
+- `docs/03_architecture/evaluation_engine_v1.md`
+- `docs/03_architecture/scenario_rubric_binding_v1.md`
+- `docs/03_architecture/learner_model_and_recommendation_v1.md`
+- `docs/03_architecture/learner_state_update_rules_v1.md`
+- `docs/03_architecture/recommendation_policy_v1.md`
+- `docs/03_architecture/recommendation_engine_surface.md`
+
+## Content docs
+- `docs/04_content/content_schema.md`
+- `docs/04_content/rubric_schema.md`
+- `docs/04_content/authoring_model_v1.md`
+
+## Ops and assurance docs
+- `docs/05_ops/metrics_and_assurance.md`
+- `docs/05_ops/evaluation_quality_plan_v1.md`
+- `docs/05_ops/recommendation_decision_logging_and_offline_evaluation.md`
+- `docs/05_ops/roadmap_v1_v2.md`
+
+## Views
+- `docs/views/product_view.md`
+- `docs/views/engineering_view.md`
+- `docs/views/assurance_view.md`
+
+## ADRs
+- `docs/adr/ADR-001_normalized_knowledge_base.md`
+- `docs/adr/ADR-002_recommendation_as_separate_context.md`
+- `docs/adr/ADR-003_text_first_before_voice.md`
+- `docs/adr/ADR-004_rubric_first_hybrid_evaluation.md`
+- `docs/adr/ADR-005_modes_model_and_session_intent.md`
+- `docs/adr/ADR-006_structured_recommendation_action_scope.md`
+- `docs/adr/ADR-007_semantic_event_granularity_v1.md`
+- `docs/adr/ADR-008_bundled_authoring_and_progressive_coverage_v1.md`
+- `docs/adr/ADR-009_evidence_weighted_proficiency_and_confidence_state.md`
+- `docs/adr/ADR-010_deterministic_policy_surface_with_future_model_extension.md`
+
+
+## Implementation mapping
+- `docs/03_architecture/implementation_mapping_v1.md` — expected module and code-boundary mapping for implementation agents.
