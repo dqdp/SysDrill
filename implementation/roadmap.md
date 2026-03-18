@@ -149,7 +149,7 @@ Why before runtime:
 ### 005. Session runtime and event log bootstrap
 
 Status:
-- pending
+- completed
 
 Goal:
 - create the minimal backend surface for session creation, answer submission,

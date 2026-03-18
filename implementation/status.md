@@ -4,10 +4,10 @@
 
 Implementation has crossed from tooling into a usable read-only backend content surface.
 
-The importer exporter MVP, content bundle reader, content catalog API, and the
-first `ExecutableLearningUnit` materialization path are complete. The next
-critical path item is the first manual end-to-end learner session loop over
-those materialized units.
+The importer exporter MVP, content bundle reader, content catalog API, first
+`ExecutableLearningUnit` materialization path, and manual runtime bootstrap are
+complete. The next critical path item is deterministic review output over that
+manual session loop.
 
 ## Prototype target
 
@@ -28,9 +28,9 @@ Recommendation is intentionally not required for the first prototype milestone.
 
 ## Current active slice
 
-- roadmap item `005. Session runtime and event log bootstrap`
-- next code change should create an explicit slice file for the first manual
-  session bootstrap path
+- roadmap item `006. Rule-first evaluation loop`
+- next code change should create an explicit slice file for deterministic review
+  output over the manual runtime path
 
 ## Completed
 
@@ -95,6 +95,19 @@ Delivered:
 - fail-closed rejection for unsupported combinations such as `MockInterview`
 - targeted unit tests for stable ids, mode-aware policy metadata, and
   non-mutating materialization
+
+### 005. Session runtime and event log bootstrap
+
+Status:
+- completed in current worktree
+
+Delivered:
+- in-memory runtime service for manual single-unit session bootstrap
+- manual runtime endpoints for session start, session read, and answer
+  submission
+- append-only semantic event emission at required runtime boundaries
+- explicit evaluation hand-off payload assembled at answer submission time
+- targeted tests for state transitions, error handling, and API wiring
 
 ## Known risks
 

@@ -183,3 +183,7 @@ def materialize_executable_learning_units(
             )
 
     return units
+
+
+def supported_materialization_pairs() -> list[tuple[str, str]]:
+    return sorted(_SUPPORTED_UNIT_POLICIES)
