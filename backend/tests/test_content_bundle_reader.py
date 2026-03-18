@@ -172,6 +172,13 @@ class ContentBundleReaderTest(unittest.TestCase):
         with self.assertRaisesRegex(BundleLoadError, "export root"):
             load_topic_catalog(self.export_root / "..", allow_draft_bundles=True)
 
+    def test_rejects_symlinked_configured_export_root(self):
+        symlink_root = Path(self.temp_dir.name) / "export-root-link"
+        symlink_root.symlink_to(self.export_root, target_is_directory=True)
+
+        with self.assertRaisesRegex(BundleLoadError, "symlink"):
+            load_topic_catalog(symlink_root, allow_draft_bundles=True)
+
 
 if __name__ == "__main__":
     unittest.main()

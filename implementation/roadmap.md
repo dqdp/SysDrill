@@ -164,6 +164,19 @@ Goal:
 - produce deterministic review output for one bounded executable-unit family,
   `concept_recall`
 
+### 006a. Runtime and loader review hardening
+
+Status:
+- completed
+
+Goal:
+- close narrow review-discovered correctness gaps in runtime concurrency,
+  export-root validation, content summary projection, and health-only bootstrap
+
+Why now:
+- these are contract-preserving hardening fixes on the critical prototype path
+- closing them before frontend work reduces avoidable demo-path instability
+
 ### 007. Recommendation placeholder
 
 Status:

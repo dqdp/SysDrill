@@ -111,6 +111,55 @@ class ContentCatalogApiTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()[0]["display_title"], "Design a News Feed")
 
+    def test_get_topics_tolerates_nullable_nested_sections(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "export_root"
+            source_dir = root / "system-design-space" / "nullable-sections"
+            source_dir.mkdir(parents=True, exist_ok=True)
+            package = {
+                "package_id": "topicpkg.nullable-sections",
+                "topic_slug": "nullable-sections",
+                "source_document_ids": ["nullable-sections"],
+                "canonical_content": None,
+                "canonical_support": {"hint_ladders": []},
+                "review": None,
+                "validation_summary": None,
+            }
+            (source_dir / "topic-package.yaml").write_text(
+                yaml.safe_dump(package, allow_unicode=True, sort_keys=False),
+                encoding="utf-8",
+            )
+            (source_dir / "provenance.json").write_text(
+                '{"topic_slug": "nullable-sections"}\n',
+                encoding="utf-8",
+            )
+            (source_dir / "validation-report.json").write_text(
+                (
+                    '{"schema_valid": true, "errors": [], "warnings": [], '
+                    '"low_confidence_paths": [], "missing_required_paths": []}\n'
+                ),
+                encoding="utf-8",
+            )
+
+            client = TestClient(create_app(content_export_root=root, allow_draft_bundles=True))
+            response = client.get("/content/topics")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.json(),
+                [
+                    {
+                        "topic_slug": "nullable-sections",
+                        "display_title": "nullable-sections",
+                        "concept_count": 0,
+                        "pattern_count": 0,
+                        "scenario_count": 0,
+                        "review_status": None,
+                        "schema_valid": True,
+                    }
+                ],
+            )
+
     def test_get_topic_returns_projected_detail_without_provenance(self):
         client = TestClient(
             create_app(content_export_root=self.export_root, allow_draft_bundles=True)

@@ -180,8 +180,12 @@ def _parse_bool_env(raw_value: str | None, env_name: str) -> bool:
 
 def create_app_from_env(env: Mapping[str, str] | None = None) -> FastAPI:
     resolved_env = os.environ if env is None else env
+    content_export_root = resolved_env.get(_CONTENT_EXPORT_ROOT_ENV)
+    if content_export_root is None or not content_export_root.strip():
+        return create_app()
+
     return create_app(
-        content_export_root=resolved_env.get(_CONTENT_EXPORT_ROOT_ENV),
+        content_export_root=content_export_root,
         allow_draft_bundles=_parse_bool_env(
             resolved_env.get(_ALLOW_DRAFT_BUNDLES_ENV),
             _ALLOW_DRAFT_BUNDLES_ENV,

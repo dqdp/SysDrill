@@ -1,4 +1,5 @@
 import copy
+import threading
 import unittest
 from pathlib import Path
 
@@ -14,6 +15,38 @@ from sysdrill_backend.session_runtime import (
     UnitModeIntentMismatchError,
     UnitNotFoundError,
 )
+
+
+class CoordinatedStateReadSession(dict):
+    def __init__(
+        self,
+        payload: dict,
+        watched_state: str,
+        first_read_event: threading.Event,
+        second_read_event: threading.Event,
+        release_event: threading.Event,
+    ):
+        super().__init__(payload)
+        self._watched_state = watched_state
+        self._first_read_event = first_read_event
+        self._second_read_event = second_read_event
+        self._release_event = release_event
+        self._read_count = 0
+        self._coordination_lock = threading.Lock()
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if key == "state" and value == self._watched_state:
+            with self._coordination_lock:
+                self._read_count += 1
+                read_count = self._read_count
+                if read_count == 1:
+                    self._first_read_event.set()
+                elif read_count == 2:
+                    self._second_read_event.set()
+            if read_count <= 2:
+                self._release_event.wait(timeout=1)
+        return value
 
 
 class SessionRuntimeServiceTest(unittest.TestCase):
@@ -233,6 +266,129 @@ class SessionRuntimeServiceTest(unittest.TestCase):
     def test_get_unknown_session_fails_closed(self):
         with self.assertRaisesRegex(SessionNotFoundError, "unknown session_id"):
             self.runtime.get_session("session.missing")
+
+    def test_concurrent_submission_yields_single_stable_answer_boundary(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        first_read_event = threading.Event()
+        second_read_event = threading.Event()
+        release_event = threading.Event()
+        coordinated_session = CoordinatedStateReadSession(
+            self.runtime._sessions[session["session_id"]],
+            watched_state="awaiting_answer",
+            first_read_event=first_read_event,
+            second_read_event=second_read_event,
+            release_event=release_event,
+        )
+        self.runtime._sessions[session["session_id"]] = coordinated_session
+        successes = []
+        failures = []
+
+        def worker(transcript: str) -> None:
+            try:
+                result = self.runtime.submit_answer(
+                    session_id=session["session_id"],
+                    transcript=transcript,
+                    response_modality="text",
+                    submission_kind="manual_submit",
+                )
+                successes.append(result)
+            except Exception as exc:  # pragma: no cover - exercised by assertion below
+                failures.append(exc)
+
+        first_thread = threading.Thread(target=worker, args=("First attempt",))
+        second_thread = threading.Thread(target=worker, args=("Second attempt",))
+
+        first_thread.start()
+        self.assertTrue(first_read_event.wait(timeout=1))
+        second_thread.start()
+        second_read_event.wait(timeout=0.2)
+        release_event.set()
+        first_thread.join(timeout=1)
+        second_thread.join(timeout=1)
+
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(failures), 1)
+        self.assertIsInstance(failures[0], SessionRuntimeInvalidStateError)
+        events = self.runtime.list_session_events(session["session_id"])
+        self.assertEqual(
+            [event["event_type"] for event in events].count("answer_submitted"),
+            1,
+        )
+        self.assertEqual(
+            self.runtime.get_session(session["session_id"])["state"],
+            "evaluation_pending",
+        )
+
+    def test_concurrent_evaluation_yields_single_reviewed_outcome(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "Caching is storing frequently accessed data in a faster layer. "
+                "Use it for read-heavy paths. The trade-offs are stale data "
+                "and invalidation complexity."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        first_read_event = threading.Event()
+        second_read_event = threading.Event()
+        release_event = threading.Event()
+        coordinated_session = CoordinatedStateReadSession(
+            self.runtime._sessions[session["session_id"]],
+            watched_state="evaluation_pending",
+            first_read_event=first_read_event,
+            second_read_event=second_read_event,
+            release_event=release_event,
+        )
+        self.runtime._sessions[session["session_id"]] = coordinated_session
+        successes = []
+        failures = []
+
+        def worker() -> None:
+            try:
+                result = self.runtime.evaluate_pending_session(session["session_id"])
+                successes.append(result)
+            except Exception as exc:  # pragma: no cover - exercised by assertion below
+                failures.append(exc)
+
+        first_thread = threading.Thread(target=worker)
+        second_thread = threading.Thread(target=worker)
+
+        first_thread.start()
+        self.assertTrue(first_read_event.wait(timeout=1))
+        second_thread.start()
+        second_read_event.wait(timeout=0.2)
+        release_event.set()
+        first_thread.join(timeout=1)
+        second_thread.join(timeout=1)
+
+        self.assertEqual(len(successes), 1)
+        self.assertEqual(len(failures), 1)
+        self.assertIsInstance(failures[0], SessionRuntimeInvalidStateError)
+        events = self.runtime.list_session_events(session["session_id"])
+        self.assertEqual(
+            [event["event_type"] for event in events].count("evaluation_attached"),
+            1,
+        )
+        self.assertEqual(
+            [event["event_type"] for event in events].count("review_presented"),
+            1,
+        )
+        self.assertEqual(
+            self.runtime.get_session(session["session_id"])["state"],
+            "review_presented",
+        )
 
 
 class SessionRuntimeApiTest(unittest.TestCase):

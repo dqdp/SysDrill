@@ -9,6 +9,9 @@
   runtime path
 - added `docs/03_architecture/concept_recall_binding_v1.md` and aligned
   evaluation docs with the prototype binding
+- hardened the manual runtime/content path against duplicate in-process session
+  transitions, symlinked configured export roots, nullable bundle summary
+  sections, and malformed draft-loading env during health-only bootstrap
 
 ## v2.2 — implementation baseline designation
 - marked v2.2 as the implementation baseline for the first controlled implementation wave

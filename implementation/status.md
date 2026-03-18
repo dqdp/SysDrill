@@ -138,6 +138,21 @@ Delivered:
 - source-of-truth documentation for the prototype `binding.concept_recall.v1`
 - targeted evaluator, runtime, and API tests for deterministic reviewed outcomes
 
+### 006a. Runtime and loader review hardening
+
+Status:
+- completed in current worktree
+
+Delivered:
+- process-local serialization of runtime state transitions for manual answer
+  submission and evaluation attachment
+- fail-closed rejection of symlinked configured export roots
+- defensive topic summary projection for nullable nested bundle sections
+- preserved health-only bootstrap when draft-loading env is malformed but no
+  content root is configured
+- regression tests for concurrency, export-root validation, nested nullable
+  sections, and bootstrap env behavior
+
 ## Known risks
 
 - exported bundles are still review-first artifacts, not approved canonical content
