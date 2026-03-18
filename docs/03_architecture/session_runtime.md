@@ -50,6 +50,7 @@ Intent modifies content selection, strictness, and recommendation interpretation
 - emit semantic events for meaningful boundaries
 - preserve transcript and timing summaries
 - hand off stable answer boundaries to evaluation
+- attach evaluation results and expose the resulting review artifact
 - close sessions deterministically as completed or abandoned
 
 ## See also

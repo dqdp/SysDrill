@@ -25,6 +25,7 @@
 Evaluation Engine depends on:
 - `docs/04_content/rubric_schema.md`
 - `docs/03_architecture/scenario_rubric_binding_v1.md`
+- `docs/03_architecture/concept_recall_binding_v1.md`
 - `docs/03_architecture/session_runtime_state_machine_v1.md`
 - `docs/03_architecture/interaction_event_model.md`
 
@@ -47,6 +48,12 @@ Evaluation Engine depends on:
 - `completion_status`
 - `content_version_refs`
 - `strictness_profile`
+
+Prototype note:
+- the first manual reviewed implementation path may use
+  `unit_family = concept_recall` together with `binding.concept_recall.v1`
+- this is a bounded prototype seam, not a replacement for the scenario-family
+  evaluation surface
 
 ## Outputs
 `EvaluationResult` should include at least:
@@ -100,6 +107,7 @@ Extract and persist **observable signals**, such as:
 - coverage of expected dimensions
 - presence/absence of key constraints
 - mention of storage / scaling / reliability elements
+- definition / usage-fit / trade-off cues for concept-recall units
 - support usage and reveal depth
 - abandonment or truncation indicators
 

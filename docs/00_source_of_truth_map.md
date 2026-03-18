@@ -55,6 +55,7 @@ This file tells implementation agents which documents are authoritative for whic
 ## Evaluation rules
 - `docs/04_content/rubric_schema.md`
 - `docs/03_architecture/scenario_rubric_binding_v1.md`
+- `docs/03_architecture/concept_recall_binding_v1.md`
 - `docs/03_architecture/evaluation_engine_v1.md`
 - `docs/05_ops/evaluation_quality_plan_v1.md`
 

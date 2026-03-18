@@ -68,6 +68,24 @@ Typical signals:
 - concise but complete explanation;
 - answer is easy to follow and audit.
 
+### 8. Concept explanation
+Пользователь объясняет, что именно представляет собой concept и как он
+работает на практическом уровне.
+
+Typical signals:
+- a working definition in plain language;
+- mechanism or purpose is stated;
+- answer is more than a title restatement.
+
+### 9. Usage judgment
+Пользователь объясняет, когда concept уместен и какие workload или product
+условия делают его хорошим выбором.
+
+Typical signals:
+- fit-to-context cues are present;
+- learner names relevant workload or latency/throughput conditions;
+- answer distinguishes use cases from generic benefits.
+
 ## Criterion result contract
 
 Каждый criterion result должен содержать:
@@ -173,6 +191,7 @@ Rubric result must include:
 
 ### Downstream signals may include
 - `coverage_gap`
+- `usage_gap`
 - `tradeoff_gap`
 - `reliability_gap`
 - `communication_gap`

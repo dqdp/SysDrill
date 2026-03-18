@@ -12,6 +12,7 @@ It is not the general production metrics document.
 - support usage lowers independence confidence without collapsing all proficiency
 - review outputs remain explainable and auditable
 - scenario bindings are actually enforced
+- concept-recall prototype bindings are actually enforced
 - evaluator/model changes do not silently shift scoring behavior
 
 ## Evaluation test corpus
@@ -60,6 +61,11 @@ Incomplete transcripts used to check confidence degradation and conservative sco
 - required criteria for each scenario family are actually enforced
 - weighting and gating rules are applied as configured
 - gating failures are surfaced in the final result
+
+### Concept-recall binding checks
+- `binding.concept_recall.v1` rejects unsupported unit families fail closed
+- definition / usage-fit / trade-off dimensions are scored separately
+- support-dependent answers lower confidence and independence-related signals
 
 ### Failure-mode checks
 - partial transcripts do not receive high-confidence full coverage

@@ -6,6 +6,10 @@ from sysdrill_backend.executable_learning_unit_materializer import (
     materialize_executable_learning_units,
     supported_materialization_pairs,
 )
+from sysdrill_backend.rule_first_evaluator import (
+    RuleFirstEvaluationError,
+    evaluate_concept_recall,
+)
 
 
 class SessionRuntimeError(ValueError):
@@ -29,7 +33,11 @@ class SessionRuntimeInvalidStateError(SessionRuntimeError):
 
 
 class SessionRuntime:
-    def __init__(self, catalog: dict[str, dict[str, Any]]):
+    def __init__(
+        self,
+        catalog: dict[str, dict[str, Any]],
+        evaluator: Any | None = None,
+    ):
         self._catalog = catalog
         self._sessions: dict[str, dict[str, Any]] = {}
         self._events: list[dict[str, Any]] = []
@@ -37,6 +45,7 @@ class SessionRuntime:
         self._event_counter = 0
         self._units_by_mode_intent: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
         self._unit_owner_by_id: dict[str, tuple[str, str]] = {}
+        self._evaluator = evaluate_concept_recall if evaluator is None else evaluator
 
         for mode, session_intent in supported_materialization_pairs():
             units = materialize_executable_learning_units(
@@ -73,6 +82,8 @@ class SessionRuntime:
             "current_unit": copy.deepcopy(unit),
             "event_ids": [],
             "last_evaluation_request": None,
+            "last_evaluation_result": None,
+            "last_review_report": None,
         }
         self._sessions[session_id] = session
 
@@ -127,6 +138,7 @@ class SessionRuntime:
             raise SessionRuntimeInvalidStateError(
                 "cannot submit answer when session state is '{0}'".format(session["state"])
             )
+        self._validate_submission_kind(session, submission_kind)
 
         session["state"] = "submitted"
         self._emit_event(
@@ -147,6 +159,7 @@ class SessionRuntime:
             "session_mode": session["mode"],
             "session_intent": session["session_intent"],
             "executable_unit_id": session["current_unit_id"],
+            "unit_family": self._unit_family(session["current_unit"]),
             "binding_id": session["current_unit"]["evaluation_binding_id"],
             "transcript_text": transcript,
             "hint_usage_summary": {
@@ -167,6 +180,71 @@ class SessionRuntime:
             "session": self.get_session(session_id),
             "submitted_unit_id": session["current_unit_id"],
             "evaluation_request": evaluation_request,
+        }
+
+    def evaluate_pending_session(self, session_id: str) -> dict[str, Any]:
+        session = self._require_session(session_id)
+        if session["state"] != "evaluation_pending":
+            raise SessionRuntimeInvalidStateError(
+                "cannot attach evaluation when session state is '{0}'".format(session["state"])
+            )
+        evaluation_request = session.get("last_evaluation_request")
+        if not isinstance(evaluation_request, dict):
+            raise SessionRuntimeError("no evaluation_request is available for this session")
+
+        try:
+            evaluation_bundle = self._evaluator(copy.deepcopy(evaluation_request))
+        except RuleFirstEvaluationError as exc:
+            raise SessionRuntimeError(str(exc)) from exc
+
+        evaluation_result = evaluation_bundle.get("evaluation_result")
+        review_report = evaluation_bundle.get("review_report")
+        if not isinstance(evaluation_result, dict) or not isinstance(review_report, dict):
+            raise SessionRuntimeError("evaluator returned an invalid evaluation bundle")
+
+        session["last_evaluation_result"] = copy.deepcopy(evaluation_result)
+        session["state"] = "evaluated"
+        self._emit_event(
+            session,
+            "evaluation_attached",
+            {
+                "evaluation_id": evaluation_result["evaluation_id"],
+                "weighted_score": evaluation_result["weighted_score"],
+                "overall_confidence": evaluation_result["overall_confidence"],
+                "missing_dimensions": list(evaluation_result["missing_dimensions"]),
+            },
+        )
+
+        session["last_review_report"] = copy.deepcopy(review_report)
+        session["state"] = "review_presented"
+        self._emit_event(
+            session,
+            "review_presented",
+            {
+                "evaluation_id": evaluation_result["evaluation_id"],
+                "strength_count": len(review_report.get("strengths", [])),
+                "missed_dimension_count": len(review_report.get("missed_dimensions", [])),
+            },
+        )
+
+        return {
+            "session": self.get_session(session_id),
+            "evaluation_result": copy.deepcopy(evaluation_result),
+            "review_report": copy.deepcopy(review_report),
+        }
+
+    def get_review(self, session_id: str) -> dict[str, Any]:
+        session = self._require_session(session_id)
+        evaluation_result = session.get("last_evaluation_result")
+        review_report = session.get("last_review_report")
+        if not isinstance(evaluation_result, dict) or not isinstance(review_report, dict):
+            raise SessionRuntimeInvalidStateError(
+                "review is not available when session state is '{0}'".format(session["state"])
+            )
+        return {
+            "session": self.get_session(session_id),
+            "evaluation_result": copy.deepcopy(evaluation_result),
+            "review_report": copy.deepcopy(review_report),
         }
 
     def _resolve_unit(self, mode: str, session_intent: str, unit_id: str) -> dict[str, Any]:
@@ -200,6 +278,22 @@ class SessionRuntime:
         if session is None:
             raise SessionNotFoundError("unknown session_id: {0}".format(session_id))
         return session
+
+    def _validate_submission_kind(self, session: dict[str, Any], submission_kind: str) -> None:
+        completion_rules = session["current_unit"].get("completion_rules")
+        if not isinstance(completion_rules, dict):
+            raise SessionRuntimeError("current unit completion_rules are missing")
+
+        expected_submission_kind = completion_rules.get("submission_kind")
+        if not isinstance(expected_submission_kind, str) or not expected_submission_kind:
+            raise SessionRuntimeError("current unit completion_rules.submission_kind is invalid")
+        if submission_kind != expected_submission_kind:
+            raise SessionRuntimeError(
+                "submission_kind '{0}' does not match current unit completion rule '{1}'".format(
+                    submission_kind,
+                    expected_submission_kind,
+                )
+            )
 
     def _emit_event(
         self,
@@ -236,7 +330,15 @@ class SessionRuntime:
             "planned_unit_ids": list(session["planned_unit_ids"]),
             "current_unit": copy.deepcopy(session["current_unit"]),
             "event_ids": list(session["event_ids"]),
+            "last_evaluation_result": copy.deepcopy(session["last_evaluation_result"]),
+            "last_review_report": copy.deepcopy(session["last_review_report"]),
         }
+
+    def _unit_family(self, unit: dict[str, Any]) -> str:
+        unit_id = unit.get("id")
+        if isinstance(unit_id, str) and unit_id.startswith("elu.concept_recall."):
+            return "concept_recall"
+        raise SessionRuntimeError("unable to derive unit_family for unit_id: {0}".format(unit_id))
 
     def _next_session_id(self) -> str:
         self._session_counter += 1

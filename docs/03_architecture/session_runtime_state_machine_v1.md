@@ -63,6 +63,10 @@ Emit: `review_presented`
 Trigger: session closure completes.
 Emit: `session_completed`
 
+Prototype note:
+- a bounded prototype path may stop at `review_presented` until explicit session
+  closure UX is added
+
 ### `* -> abandoned`
 Trigger: explicit user exit, timeout, or unrecoverable flow interruption.
 Emit: `session_abandoned`

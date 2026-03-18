@@ -101,6 +101,11 @@ This is a strong pedagogical signal and must remain distinct from `unit_presente
 Represents the system judgment attached to a learner attempt. It should remain
 separate from interaction events so evidence and judgment can be audited independently.
 
+### `review_presented`
+Represents the learner-visible review artifact becoming available for the
+attempt. It should remain distinct from `evaluation_attached` so scoring and
+review rendering can be audited separately.
+
 ## Payload examples
 
 ### `hint_requested`
@@ -122,6 +127,25 @@ separate from interaction events so evidence and judgment can be audited indepen
   "submission_kind": "manual_submit",
   "used_prior_hints": true,
   "follow_up_context": false
+}
+```
+
+### `evaluation_attached`
+```json
+{
+  "evaluation_id": "evaluation_123",
+  "weighted_score": 0.67,
+  "overall_confidence": 0.74,
+  "missing_dimensions": ["trade_off_articulation"]
+}
+```
+
+### `review_presented`
+```json
+{
+  "evaluation_id": "evaluation_123",
+  "strength_count": 2,
+  "missed_dimension_count": 1
 }
 ```
 

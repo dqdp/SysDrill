@@ -158,10 +158,11 @@ Goal:
 ### 006. Rule-first evaluation loop
 
 Status:
-- pending
+- completed
 
 Goal:
-- produce deterministic review output for one bounded scenario family
+- produce deterministic review output for one bounded executable-unit family,
+  `concept_recall`
 
 ### 007. Recommendation placeholder
 

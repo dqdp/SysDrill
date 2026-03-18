@@ -28,9 +28,9 @@ Recommendation is intentionally not required for the first prototype milestone.
 
 ## Current active slice
 
-- roadmap item `006. Rule-first evaluation loop`
-- next code change should create an explicit slice file for deterministic review
-  output over the manual runtime path
+- roadmap item `008. Practice frontend shell`
+- next code change should connect a thin UI or equivalent demo path to the
+  now-reviewed manual runtime loop
 
 ## Completed
 
@@ -108,6 +108,35 @@ Delivered:
 - append-only semantic event emission at required runtime boundaries
 - explicit evaluation hand-off payload assembled at answer submission time
 - targeted tests for state transitions, error handling, and API wiring
+
+### 005a. Bootstrap and runtime contract hardening
+
+Status:
+- completed in current worktree
+
+Delivered:
+- environment-configured ASGI bootstrap for content/runtime surfaces while
+  preserving the explicit `create_app(...)` factory contract
+- typed request validation for runtime POST endpoints to eliminate incidental
+  `500` errors on malformed payloads
+- fail-closed rejection of symlinked required bundle sidecar files
+- runtime enforcement of unit `completion_rules.submission_kind`
+- regression tests for bootstrap config, request validation, symlinked files,
+  and submission-kind mismatches
+
+### 006. Rule-first evaluation loop
+
+Status:
+- completed in current worktree
+
+Delivered:
+- deterministic rule-first evaluator for the bounded `concept_recall` unit
+  family
+- runtime transition from `evaluation_pending` to `review_presented`
+- semantic event emission for `evaluation_attached` and `review_presented`
+- explicit review retrieval path through the backend API
+- source-of-truth documentation for the prototype `binding.concept_recall.v1`
+- targeted evaluator, runtime, and API tests for deterministic reviewed outcomes
 
 ## Known risks
 

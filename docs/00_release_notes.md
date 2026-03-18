@@ -5,6 +5,10 @@
 - added root Python tooling posture with `Makefile`-based verification hooks
 - added root `ruff` configuration for Python code
 - documented current implementation direction as Python backend plus separate TypeScript frontend
+- added a deterministic rule-first review loop for the bounded `concept_recall`
+  runtime path
+- added `docs/03_architecture/concept_recall_binding_v1.md` and aligned
+  evaluation docs with the prototype binding
 
 ## v2.2 — implementation baseline designation
 - marked v2.2 as the implementation baseline for the first controlled implementation wave

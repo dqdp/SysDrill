@@ -10,6 +10,11 @@
 - какие hard gating conditions существуют;
 - как mode меняет строгость.
 
+Note:
+- this document remains scenario-family specific
+- the bounded prototype `concept_recall` path is documented separately in
+  `concept_recall_binding_v1.md`
+
 ## Binding model
 
 Каждый binding определяет:
@@ -60,6 +65,8 @@ Guidance threshold:
 - `reliability_awareness`
 - `trade_off_articulation`
 - `communication_clarity`
+- `concept_explanation`
+- `usage_judgment`
 
 ## Scenario family bindings
 

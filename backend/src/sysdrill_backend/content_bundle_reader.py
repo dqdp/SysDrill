@@ -44,6 +44,8 @@ def _read_yaml(path: Path) -> dict:
 
 def _required_file(topic_dir: Path, filename: str) -> Path:
     path = topic_dir / filename
+    if path.is_symlink():
+        raise BundleLoadError("symlinked bundle files are not allowed: {0}".format(path))
     if not path.exists():
         raise BundleLoadError("missing required bundle file: {0}".format(filename))
     if not path.is_file():

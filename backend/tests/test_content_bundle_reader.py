@@ -111,6 +111,36 @@ class ContentBundleReaderTest(unittest.TestCase):
         with self.assertRaisesRegex(BundleLoadError, "symlink"):
             load_topic_catalog(symlink_root, allow_draft_bundles=True)
 
+    def test_rejects_symlinked_topic_package_file(self):
+        topic_dir = self.export_root / "system-design-space" / "alpha-topic"
+        target = Path(self.temp_dir.name) / "outside-topic-package.yaml"
+        target.write_text((topic_dir / "topic-package.yaml").read_text(encoding="utf-8"))
+        (topic_dir / "topic-package.yaml").unlink()
+        (topic_dir / "topic-package.yaml").symlink_to(target)
+
+        with self.assertRaisesRegex(BundleLoadError, "symlink"):
+            load_topic_catalog(self.export_root, allow_draft_bundles=True)
+
+    def test_rejects_symlinked_provenance_file(self):
+        topic_dir = self.export_root / "system-design-space" / "alpha-topic"
+        target = Path(self.temp_dir.name) / "outside-provenance.json"
+        target.write_text((topic_dir / "provenance.json").read_text(encoding="utf-8"))
+        (topic_dir / "provenance.json").unlink()
+        (topic_dir / "provenance.json").symlink_to(target)
+
+        with self.assertRaisesRegex(BundleLoadError, "symlink"):
+            load_topic_catalog(self.export_root, allow_draft_bundles=True)
+
+    def test_rejects_symlinked_validation_report_file(self):
+        topic_dir = self.export_root / "system-design-space" / "alpha-topic"
+        target = Path(self.temp_dir.name) / "outside-validation-report.json"
+        target.write_text((topic_dir / "validation-report.json").read_text(encoding="utf-8"))
+        (topic_dir / "validation-report.json").unlink()
+        (topic_dir / "validation-report.json").symlink_to(target)
+
+        with self.assertRaisesRegex(BundleLoadError, "symlink"):
+            load_topic_catalog(self.export_root, allow_draft_bundles=True)
+
     def test_rejects_topic_package_when_yaml_payload_is_not_mapping(self):
         package_path = (
             self.export_root / "system-design-space" / "alpha-topic" / "topic-package.yaml"
