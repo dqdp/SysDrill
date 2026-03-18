@@ -4,15 +4,33 @@
 
 Implementation has crossed from tooling into a usable read-only backend content surface.
 
-The importer exporter MVP, content bundle reader, and content catalog API
-surface are complete. The next critical path item is materializing bounded
-`ExecutableLearningUnit` shapes without collapsing `Content Kernel` and
-`Learning Design`.
+The importer exporter MVP, content bundle reader, content catalog API, and the
+first `ExecutableLearningUnit` materialization path are complete. The next
+critical path item is the first manual end-to-end learner session loop over
+those materialized units.
+
+## Prototype target
+
+The shortest path to a working prototype is:
+- manual session launch
+- one bounded unit presentation from `ExecutableLearningUnit`
+- one answer submission path
+- append-only semantic events
+- deterministic review output
+- thin UI or equivalent demo path
+
+Recommendation is intentionally not required for the first prototype milestone.
+
+## Current active milestone
+
+- `Milestone B. Manual end-to-end prototype`
+- fast-path order: `005 -> 006 -> 008`
 
 ## Current active slice
 
-- roadmap item `004. Executable learning unit materialization`
-- next code change requires a new explicit slice file before implementation
+- roadmap item `005. Session runtime and event log bootstrap`
+- next code change should create an explicit slice file for the first manual
+  session bootstrap path
 
 ## Completed
 
@@ -65,6 +83,19 @@ Delivered:
 - regression tests for misconfigured roots, symlink traversal, and malformed
   payloads
 
+### 004. Executable learning unit materialization
+
+Status:
+- completed in current worktree
+
+Delivered:
+- deterministic backend materializer for `concept_recall`
+  `ExecutableLearningUnit` shapes
+- bounded support for explicit `Study` and `Practice` mode/intent combinations
+- fail-closed rejection for unsupported combinations such as `MockInterview`
+- targeted unit tests for stable ids, mode-aware policy metadata, and
+  non-mutating materialization
+
 ## Known risks
 
 - exported bundles are still review-first artifacts, not approved canonical content
@@ -80,6 +111,7 @@ Delivered:
 
 ## Exit condition for current phase
 
-Phase 3 hand-off is complete when the backend can materialize bounded
-`ExecutableLearningUnit` shapes from loaded content and learning-design inputs
-without bypassing the `Content Kernel -> Learning Design -> Runtime` seam.
+The current phase is complete when one learner can manually launch a bounded
+session over a materialized `ExecutableLearningUnit`, submit an answer, emit
+append-only semantic events, and receive deterministic review through the
+backend plus a thin UI or equivalent demo path.
