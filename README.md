@@ -41,6 +41,16 @@ Its core value is not passive content consumption. The system is meant to help l
 system-design-trainer/
   AGENTS.md
   README.md
+  backend/
   docs/
   examples/
+  frontend/
+  tools/
 ```
+
+## Current implementation direction
+
+- backend: Python `3.12+` with `FastAPI`
+- frontend: separate TypeScript application
+- Python tooling and backend share a root `.venv`
+- Python verification includes `ruff` plus tests

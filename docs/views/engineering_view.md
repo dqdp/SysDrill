@@ -24,6 +24,8 @@
 - hybrid evaluation over pure freeform LLM judgment
 - text-first validation before voice complexity
 - three runtime modes plus session intent over proliferating pseudo-modes
+- Python-first backend and tooling over forcing a single language across the repo
+- separate TypeScript frontend when the UI surface justifies it
 
 ## Where complexity should be allowed
 
@@ -56,3 +58,10 @@ The implementation must therefore support:
 - optional learning-design derivatives
 - template-assisted generation or curation workflows
 - progressive enrichment without requiring exhaustive content coverage from day one
+
+## Repository tooling posture
+
+- use a root Python `.venv` for backend and Python-based tools
+- keep Python packages logically separate even when they share one environment
+- treat `ruff` as part of the default verification loop alongside tests
+- keep frontend package management independent from the Python environment

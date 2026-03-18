@@ -8,6 +8,16 @@ It exists to help implementation agents translate bounded contexts and contracts
 ## Mapping principle
 v1 may be deployed as a monolith, but the code should preserve domain seams as if they were potential future service seams.
 
+## Implementation stack posture
+
+For the first implementation wave, the preferred repository posture is:
+- Python `3.12+` for backend and Python-based operational tooling
+- `FastAPI` for the application backend API surface
+- a separate TypeScript frontend application for richer interaction surfaces
+- a shared root Python virtual environment for backend, worker, and tooling tasks
+
+This stack choice is an implementation decision, not a change to bounded-context ownership.
+
 ## Expected module families
 
 ## 1. content_kernel
@@ -97,6 +107,11 @@ Should own:
 - learner dashboard APIs
 - review surfaces
 - weak-area/readiness surfaces
+
+Recommended repository split in v1:
+- `backend/` for Python application code
+- `frontend/` for TypeScript UI code
+- `tools/` for Python operational tooling
 
 ## Persistence ownership guidance
 - runtime session records belong with `session_runtime`
