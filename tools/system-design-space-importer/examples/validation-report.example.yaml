@@ -1,0 +1,12 @@
+package_id: topicpkg.event_driven_architecture.2026_03_18
+checked_at: 2026-03-18T15:15:00Z
+schema_valid: true
+errors: []
+warnings:
+  - field canonical_content.concepts[0].description is review-required
+  - no hint ladders were generated
+low_confidence_paths:
+  - canonical_content.concepts[0].description
+  - canonical_content.concepts[0].when_to_use
+  - canonical_content.concepts[0].prerequisites
+missing_required_paths: []

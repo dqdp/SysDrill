@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Event-Driven Architecture - System Design Space</title>
+  </head>
+  <body>
+    <nav>
+      <a href="/chapter/load-balancing/">Load Balancing</a>
+    </nav>
+    <main>
+      <article>
+        <h1>Event-Driven Architecture</h1>
+        <p>
+          Event-driven architecture shifts communication toward immutable domain
+          events, asynchronous consumers, and operational discipline around
+          contracts, idempotency, and observability.
+        </p>
+
+        <h2>Event-Driven фундамент</h2>
+        <p>
+          Producers and consumers exchange events through a broker or log, which
+          introduces eventual consistency and requires idempotent consumers.
+        </p>
+        <ul>
+          <li>Producers publish facts.</li>
+          <li>Consumers build projections.</li>
+        </ul>
+
+        <h2>Частые ошибки</h2>
+        <p>
+          Teams often introduce asynchronous messaging without explicit event
+          contracts or replay discipline.
+        </p>
+
+        <a href="https://martinfowler.com/eaaDev/EventSourcing.html">
+          Martin Fowler Event Sourcing
+        </a>
+      </article>
+    </main>
+  </body>
+</html>

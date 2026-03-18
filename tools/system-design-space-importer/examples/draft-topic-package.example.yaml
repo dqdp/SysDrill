@@ -1,0 +1,101 @@
+package_id: topicpkg.event_driven_architecture.2026_03_18
+topic_slug: event-driven-architecture
+generated_at: 2026-03-18T15:14:00Z
+tool_version: v0.1.0
+source_document_ids:
+  - srcdoc.event_driven_architecture.2026_03_18
+canonical_content:
+  concepts:
+    - id:
+        value: concept.event_driven_architecture
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: Event-Driven Architecture
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      description:
+        value: >
+          Architectural style centered on immutable domain events and
+          asynchronous consumers.
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.event_driven_architecture.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.83
+        review_required: true
+      why_it_matters:
+        value:
+          - reduces coupling
+          - improves fan-out scalability
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.event_driven_architecture.summary.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      when_to_use:
+        value:
+          - asynchronous workflows
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.section_body.010]
+            extraction_mode: llm_assisted
+            confidence: 0.68
+        review_required: true
+      tradeoffs:
+        value:
+          - adds operational complexity
+          - requires idempotency discipline
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.section_body.027]
+            extraction_mode: llm_assisted
+            confidence: 0.78
+        review_required: true
+      related_concepts:
+        value: [cqrs, saga, idempotency]
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.related_link.001, frag.related_link.002]
+            extraction_mode: rule
+            confidence: 0.87
+        review_required: false
+      prerequisites:
+        value: [consistency_patterns]
+        provenance:
+          - document_id: srcdoc.event_driven_architecture.2026_03_18
+            fragment_ids: [frag.section_body.011]
+            extraction_mode: llm_assisted
+            confidence: 0.55
+        review_required: true
+  patterns: []
+  scenarios: []
+canonical_support:
+  hint_ladders: []
+learning_design_drafts:
+  coverage_notes:
+    - derive a recall card from canonical summary and tradeoffs
+    - defer scenario authoring until canonical axes are reviewed
+  candidate_card_types:
+    - recall
+    - failure
+review:
+  status: needs_review
+  required_actions:
+    - verify concept description and tradeoffs
+    - add canonical axes manually if scenarioization is desired
+    - decide whether this page should remain concept-only
+validation_summary:
+  schema_valid: true
+  errors: []
+  warnings:
+    - several fields remain llm-assisted and review-required

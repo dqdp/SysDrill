@@ -1,0 +1,15 @@
+fragment_id: frag.event_driven_architecture.summary.001
+document_id: srcdoc.event_driven_architecture.2026_03_18
+kind: summary
+heading_path: []
+order: 2
+text: >
+  Event-driven architecture shifts communication toward immutable domain events,
+  asynchronous consumers, and operational discipline around contracts,
+  idempotency, and observability.
+links:
+  - url: https://martinfowler.com/eaaDev/EventSourcing.html
+    title: Martin Fowler Event Sourcing
+source_selector: main article p
+dom_path: html.body.main.article.p[1]
+fragment_hash: sha256:5be9d9c5a4f7b437c9b7c62e3e6ac4dfb5ef13902f2ac655e0d64a7a1a8bcb1a

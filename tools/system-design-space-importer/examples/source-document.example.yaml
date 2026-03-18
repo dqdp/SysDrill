@@ -1,0 +1,15 @@
+document_id: srcdoc.event_driven_architecture.2026_03_18
+source_name: system-design.space
+source_url: https://system-design.space/chapter/event-driven-architecture/
+canonical_url: https://system-design.space/chapter/event-driven-architecture/
+discovered_from: https://system-design.space/
+fetched_at: 2026-03-18T15:10:00Z
+fetch_mode: http_only
+http_status: 200
+content_type: text/html
+charset: utf-8
+locale: ru
+source_hash: sha256:6f6baad83d704f17b6b7b86461b4f0a7f99a4d83c75e04c2fca091f472bfa6c9
+raw_html_path: runs/2026-03-18T15-10-00Z/documents/event-driven-architecture/raw.html
+normalized_text_path: runs/2026-03-18T15-10-00Z/documents/event-driven-architecture/normalized.txt
+parser_version: v0.1.0
