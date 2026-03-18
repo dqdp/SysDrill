@@ -9,6 +9,7 @@ Rules of engagement:
 - Propose at least two architectural approaches when applicable.
 - Explicitly discuss trade-offs (performance, complexity, correctness, operability).
 - Only after alignment, propose a concrete plan.
+- Do not write or modify code unless an explicit TDD plan exists and is aligned with the user.
 - Follow TDD by default: define or update tests first, then implement code changes to satisfy them.
 - Try to cover all constrained and edge cases in tests; think non-standard when designing test scenarios.
 - Write code strictly according to the agreed plan.
@@ -35,6 +36,10 @@ Practical rules:
 - Keep comments concise and focused on responsibility boundaries and intent (including cold-path vs hot-path when relevant), not on obvious line-by-line mechanics.
 - If you are not sure about an assumption, requirement, scope boundary, or expected behavior, explicitly consult the user before proceeding.
 - Before starting code changes, explicitly align with the user on the expected test contract (scope, critical scenarios, and acceptance criteria).
+- Before starting code changes, create or update an explicit TDD plan with scope, test contract, and acceptance criteria.
+- After creating or updating a TDD plan, explicitly review it for weak spots, hidden assumptions, and conflicts with the knowledge base before writing code.
+- If that review finds contradictions, undefined behavior, or conflicts with binding docs, report them to the user together with recommended fixes before proceeding to code.
+- Prefer storing implementation TDD plans under `implementation/slices/` when the work is larger than a trivial one-file fix.
 
 This repository is the authoritative knowledge base for agents implementing **System Design Trainer**.
 
