@@ -267,6 +267,113 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         with self.assertRaisesRegex(SessionNotFoundError, "unknown session_id"):
             self.runtime.get_session("session.missing")
 
+    def test_list_manual_launch_options_returns_stable_runtime_facing_items(self):
+        launch_options = self.runtime.list_manual_launch_options(
+            mode="Study",
+            session_intent="LearnNew",
+        )
+
+        self.assertEqual(
+            launch_options,
+            [
+                {
+                    "unit_id": "elu.concept_recall.study.learn_new.concept.alpha-topic",
+                    "content_id": "concept.alpha-topic",
+                    "topic_slug": "alpha-topic",
+                    "display_title": "Кэширование",
+                    "visible_prompt": (
+                        "Explain the concept 'Кэширование'. Cover what it is, "
+                        "when to use it, and the main trade-offs."
+                    ),
+                    "effective_difficulty": "introductory",
+                }
+            ],
+        )
+
+    def test_list_manual_launch_options_returns_richer_practice_prompt_without_shape_change(self):
+        launch_options = self.runtime.list_manual_launch_options(
+            mode="Practice",
+            session_intent="Remediate",
+        )
+
+        self.assertEqual(
+            launch_options,
+            [
+                {
+                    "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
+                    "content_id": "concept.alpha-topic",
+                    "topic_slug": "alpha-topic",
+                    "display_title": "Кэширование",
+                    "visible_prompt": (
+                        "You're advising a teammate on whether to use 'Кэширование' in a "
+                        "real system discussion. Context: Кэш снижает нагрузку и "
+                        "латентность. Why it matters: Снижает нагрузку на базу данных. "
+                        "Explain what it is, when you would use it, and the main "
+                        "trade-offs you would call out."
+                    ),
+                    "effective_difficulty": "targeted",
+                }
+            ],
+        )
+
+    def test_list_manual_launch_options_returns_empty_list_for_supported_combo_without_units(self):
+        empty_catalog = copy.deepcopy(self.catalog)
+        empty_catalog["alpha-topic"]["topic_package"]["learning_design_drafts"][
+            "candidate_card_types"
+        ] = []
+        runtime = SessionRuntime(empty_catalog)
+
+        launch_options = runtime.list_manual_launch_options(
+            mode="Study",
+            session_intent="LearnNew",
+        )
+
+        self.assertEqual(launch_options, [])
+
+    def test_list_manual_launch_options_rejects_unsupported_mode_intent_combination(self):
+        with self.assertRaisesRegex(UnitModeIntentMismatchError, "unsupported runtime"):
+            self.runtime.list_manual_launch_options(
+                mode="Practice",
+                session_intent="LearnNew",
+            )
+
+    def test_practice_session_submission_and_evaluation_preserve_concept_recall_contract(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Practice",
+            session_intent="Remediate",
+            unit_id=self.practice_unit_id,
+        )
+
+        submit_result = self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "Caching stores frequently accessed data in a faster layer. Use it on "
+                "read-heavy or latency-sensitive paths. The trade-offs are stale data, "
+                "invalidation complexity, and extra memory cost."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+            response_latency_ms=31000,
+        )
+
+        self.assertEqual(
+            submit_result["evaluation_request"]["binding_id"],
+            "binding.concept_recall.v1",
+        )
+        self.assertEqual(
+            submit_result["evaluation_request"]["unit_family"],
+            "concept_recall",
+        )
+
+        evaluation_result = self.runtime.evaluate_pending_session(session["session_id"])
+
+        self.assertEqual(evaluation_result["session"]["state"], "review_presented")
+        self.assertEqual(
+            evaluation_result["evaluation_result"]["binding_id"],
+            "binding.concept_recall.v1",
+        )
+
     def test_concurrent_submission_yields_single_stable_answer_boundary(self):
         session = self.runtime.start_manual_session(
             user_id="user-1",
@@ -415,6 +522,89 @@ class SessionRuntimeApiTest(unittest.TestCase):
         self.assertEqual(payload["state"], "awaiting_answer")
         self.assertEqual(payload["planned_unit_ids"], [self.study_unit_id])
         self.assertEqual(len(payload["event_ids"]), 3)
+
+    def test_manual_launch_options_endpoint_returns_supported_items(self):
+        response = self.client.get(
+            "/runtime/manual-launch-options",
+            params={
+                "mode": "Study",
+                "session_intent": "LearnNew",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "mode": "Study",
+                "session_intent": "LearnNew",
+                "items": [
+                    {
+                        "unit_id": "elu.concept_recall.study.learn_new.concept.alpha-topic",
+                        "content_id": "concept.alpha-topic",
+                        "topic_slug": "alpha-topic",
+                        "display_title": "Кэширование",
+                        "visible_prompt": (
+                            "Explain the concept 'Кэширование'. Cover what it is, "
+                            "when to use it, and the main trade-offs."
+                        ),
+                        "effective_difficulty": "introductory",
+                    }
+                ],
+            },
+        )
+
+    def test_manual_launch_options_endpoint_returns_richer_practice_prompt(self):
+        response = self.client.get(
+            "/runtime/manual-launch-options",
+            params={
+                "mode": "Practice",
+                "session_intent": "Remediate",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "mode": "Practice",
+                "session_intent": "Remediate",
+                "items": [
+                    {
+                        "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
+                        "content_id": "concept.alpha-topic",
+                        "topic_slug": "alpha-topic",
+                        "display_title": "Кэширование",
+                        "visible_prompt": (
+                            "You're advising a teammate on whether to use "
+                            "'Кэширование' in a real system discussion. Context: "
+                            "Кэш снижает нагрузку и латентность. Why it matters: "
+                            "Снижает нагрузку на базу данных. Explain what it is, "
+                            "when you would use it, and the main trade-offs you "
+                            "would call out."
+                        ),
+                        "effective_difficulty": "targeted",
+                    }
+                ],
+            },
+        )
+
+    def test_manual_launch_options_endpoint_returns_400_for_unsupported_mode_intent(self):
+        response = self.client.get(
+            "/runtime/manual-launch-options",
+            params={
+                "mode": "Practice",
+                "session_intent": "LearnNew",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unsupported runtime", response.json()["detail"])
+
+    def test_manual_launch_options_endpoint_requires_query_params(self):
+        response = self.client.get("/runtime/manual-launch-options")
+
+        self.assertEqual(response.status_code, 422)
 
     def test_get_session_endpoint_returns_snapshot(self):
         start_response = self.client.post(

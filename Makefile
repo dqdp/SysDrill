@@ -3,8 +3,10 @@ VENV ?= .venv
 PIP := $(VENV)/bin/pip
 PY := $(VENV)/bin/python
 RUFF := $(VENV)/bin/ruff
+NPM ?= npm
+FRONTEND_DIR := frontend
 
-.PHONY: bootstrap-python verify-python test-python lint-python format-python-check smoke-python smoke-importer smoke-backend ci-python
+.PHONY: bootstrap-python verify-python test-python lint-python format-python-check smoke-python smoke-importer smoke-backend ci-python bootstrap-frontend test-frontend build-frontend verify-frontend
 
 bootstrap-python:
 	$(PYTHON) -m venv $(VENV)
@@ -34,3 +36,14 @@ smoke-python: smoke-importer smoke-backend
 verify-python: lint-python format-python-check test-python
 
 ci-python: verify-python smoke-python
+
+bootstrap-frontend:
+	cd $(FRONTEND_DIR) && $(NPM) ci
+
+test-frontend:
+	cd $(FRONTEND_DIR) && $(NPM) run test:run
+
+build-frontend:
+	cd $(FRONTEND_DIR) && $(NPM) run build
+
+verify-frontend: test-frontend build-frontend

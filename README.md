@@ -57,16 +57,19 @@ system-design-trainer/
 
 ## Verification
 
-The current repository verification surface is Python-only and runs from the
-root `Makefile`.
+Repository verification runs from the root `Makefile`.
 
-- create or refresh the local environment:
+- create or refresh the Python environment:
   `make bootstrap-python`
-- run lint, format-check, and unit tests:
+- run Python lint, format-check, and unit tests:
   `make verify-python`
-- run bounded smoke verification for the current importer and backend prototype
-  seams:
+- run bounded Python smoke verification for the current importer and backend
+  prototype seams:
   `make smoke-python`
+- install frontend dependencies:
+  `make bootstrap-frontend`
+- run frontend verification:
+  `make verify-frontend`
 
 GitHub CI should use the same command surface after creating a clean `.venv`
-with `Python 3.12`.
+with `Python 3.12` and a clean frontend `npm` install.

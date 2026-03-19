@@ -114,6 +114,31 @@ def _required_non_empty_string(
     )
 
 
+def _optional_non_empty_string(payload: dict[str, Any], field_name: str) -> str | None:
+    value = _unwrap_payload(payload.get(field_name))
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.split())
+    return normalized or None
+
+
+def _optional_non_empty_string_list(payload: dict[str, Any], field_name: str) -> list[str]:
+    value = _unwrap_payload(payload.get(field_name))
+    if isinstance(value, str):
+        normalized = " ".join(value.split())
+        return [normalized] if normalized else []
+    if not isinstance(value, list):
+        return []
+    normalized_items = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        normalized = " ".join(item.split())
+        if normalized:
+            normalized_items.append(normalized)
+    return normalized_items
+
+
 def _candidate_card_types(topic_package: dict[str, Any]) -> list[str]:
     learning_design_drafts = topic_package.get("learning_design_drafts", {})
     candidate_card_types = learning_design_drafts.get("candidate_card_types", [])
@@ -134,11 +159,57 @@ def _unit_policy(mode: str, session_intent: str) -> dict[str, Any]:
     return policy
 
 
-def _build_visible_prompt(concept_title: str) -> str:
+def _ensure_terminal_punctuation(text: str) -> str:
+    if text[-1] in ".!?":
+        return text
+    return "{0}.".format(text)
+
+
+def _build_study_visible_prompt(concept_title: str) -> str:
     return (
         "Explain the concept '{0}'. Cover what it is, when to use it, and "
         "the main trade-offs.".format(concept_title)
     )
+
+
+def _build_practice_visible_prompt(concept: dict[str, Any], concept_title: str) -> str:
+    prompt_parts = [
+        "You're advising a teammate on whether to use '{0}' in a real system discussion.".format(
+            concept_title
+        )
+    ]
+    description = _optional_non_empty_string(concept, "description")
+    if description is not None:
+        prompt_parts.append("Context: {0}".format(_ensure_terminal_punctuation(description)))
+    why_it_matters = _optional_non_empty_string_list(concept, "why_it_matters")
+    if why_it_matters:
+        prompt_parts.append(
+            "Why it matters: {0}".format(_ensure_terminal_punctuation("; ".join(why_it_matters)))
+        )
+    when_to_use = _optional_non_empty_string_list(concept, "when_to_use")
+    if when_to_use:
+        prompt_parts.append(
+            "Use-case cues: {0}".format(_ensure_terminal_punctuation("; ".join(when_to_use)))
+        )
+    tradeoffs = _optional_non_empty_string_list(concept, "tradeoffs")
+    if tradeoffs:
+        prompt_parts.append(
+            "Trade-off cues: {0}".format(_ensure_terminal_punctuation("; ".join(tradeoffs)))
+        )
+    prompt_parts.append(
+        "Explain what it is, when you would use it, and the main trade-offs you would call out."
+    )
+    return " ".join(prompt_parts)
+
+
+def _build_visible_prompt(
+    mode: str,
+    concept: dict[str, Any],
+    concept_title: str,
+) -> str:
+    if mode == "Practice":
+        return _build_practice_visible_prompt(concept, concept_title)
+    return _build_study_visible_prompt(concept_title)
 
 
 def materialize_executable_learning_units(
@@ -172,7 +243,7 @@ def materialize_executable_learning_units(
                     "source_content_ids": [concept_id],
                     "mode": mode,
                     "session_intent": session_intent,
-                    "visible_prompt": _build_visible_prompt(concept_title),
+                    "visible_prompt": _build_visible_prompt(mode, concept, concept_title),
                     "pedagogical_goal": _PEDAGOGICAL_GOAL,
                     "effective_difficulty": policy["effective_difficulty"],
                     "allowed_hint_levels": list(policy["allowed_hint_levels"]),

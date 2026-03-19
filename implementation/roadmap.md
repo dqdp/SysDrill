@@ -60,22 +60,29 @@ Exit criteria:
   deterministic review through the backend and a thin UI or equivalent demo
 
 Status:
-- next critical milestone
+- completed in current worktree
 
-### Milestone C. Guided next-step prototype
+### Milestone C. Practice differentiation and guided next-step prototype
 
 Includes:
+- `006c0. Bounded corpus acquisition and quality sweep`
+- `006c. Practice prompt expansion`
 - `007. Recommendation placeholder`
 
 Goal:
-- replace manual launch with a deterministic next-step recommendation
+- acquire a wider bounded corpus, make `Practice` meaningfully different from
+  `Study` inside the current `concept_recall` prototype seam, then replace
+  manual launch with a deterministic next-step recommendation
 
 Exit criteria:
+- a wider bounded corpus is imported and backend-compatible
+- `Practice` launchable units are visibly richer than `Study` without changing
+  the current runtime/evaluation contracts
 - recommendation returns one bounded action and runtime can start from that
   action without changing the Milestone B loop semantics
 
 Status:
-- pending until Milestone B is demoable
+- next critical milestone
 
 ## Ordered slices
 
@@ -209,10 +216,42 @@ Guardrail:
 - recommendation must stay a structured action surface, even if the first
   version is rule-based and narrow
 
+### 006c0. Bounded corpus acquisition and quality sweep
+
+Status:
+- completed in current worktree
+
+Goal:
+- gather a materially larger bounded corpus from `system-design.space` and
+  measure its structural quality before changing backend learning-design
+  behavior
+
+Why now:
+- current product feedback is dominated by an undersized content sample
+- a larger bounded corpus gives a more reliable basis for `Practice` prompt
+  differentiation and later recommendation work
+
+### 006c. Practice prompt expansion
+
+Status:
+- completed in current worktree
+
+Goal:
+- enrich the current `Practice` prompt framing so it is more applied and more
+  visibly different from `Study` while preserving the existing
+  `concept_recall` binding, runtime loop, and API surface
+
+Why before recommendation:
+- current launcher feedback shows that `Practice` and `Study` are too similar
+  to be productively recommended as distinct next-step actions
+- recommendation should sit on top of a more meaningful action space, not paper
+  over a weak unit shape
+- this slice should follow `006c0`, not precede corpus acquisition
+
 ### 008. Practice frontend shell
 
 Status:
-- pending
+- completed
 
 Goal:
 - connect the complex TS frontend to the minimal backend loop

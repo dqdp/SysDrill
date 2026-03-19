@@ -102,6 +102,56 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             },
         )
 
+    def test_practice_prompt_uses_richer_applied_framing_when_context_is_available(self):
+        study_units = materialize_executable_learning_units(
+            self.catalog,
+            mode="Study",
+            session_intent="LearnNew",
+        )
+        practice_units = materialize_executable_learning_units(
+            self.catalog,
+            mode="Practice",
+            session_intent="Remediate",
+        )
+
+        self.assertEqual(
+            study_units[0]["visible_prompt"],
+            (
+                "Explain the concept 'Кэширование'. Cover what it is, when to use it, "
+                "and the main trade-offs."
+            ),
+        )
+        self.assertEqual(
+            practice_units[0]["visible_prompt"],
+            (
+                "You're advising a teammate on whether to use 'Кэширование' in a real "
+                "system discussion. Context: Кэш снижает нагрузку и латентность. Why it "
+                "matters: Снижает нагрузку на базу данных. Explain what it is, when you "
+                "would use it, and the main trade-offs you would call out."
+            ),
+        )
+
+    def test_practice_prompt_falls_back_cleanly_when_optional_context_is_empty(self):
+        catalog = copy.deepcopy(self.catalog)
+        concept = catalog["alpha-topic"]["topic_package"]["canonical_content"]["concepts"][0]
+        concept["description"]["value"] = ""
+        concept["why_it_matters"]["value"] = []
+
+        units = materialize_executable_learning_units(
+            catalog,
+            mode="Practice",
+            session_intent="Reinforce",
+        )
+
+        self.assertEqual(
+            units[0]["visible_prompt"],
+            (
+                "You're advising a teammate on whether to use 'Кэширование' in a real "
+                "system discussion. Explain what it is, when you would use it, and the "
+                "main trade-offs you would call out."
+            ),
+        )
+
     def test_rejects_unsupported_mode_intent_combination(self):
         with self.assertRaisesRegex(ExecutableLearningUnitMaterializationError, "unsupported"):
             materialize_executable_learning_units(

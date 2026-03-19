@@ -33,6 +33,25 @@ class SessionRuntimeInvalidStateError(SessionRuntimeError):
     pass
 
 
+def _is_draft_field(payload: Any) -> bool:
+    return (
+        isinstance(payload, dict)
+        and "value" in payload
+        and "provenance" in payload
+        and "review_required" in payload
+    )
+
+
+def _unwrap_payload(payload: Any) -> Any:
+    if _is_draft_field(payload):
+        return _unwrap_payload(payload["value"])
+    if isinstance(payload, dict):
+        return {key: _unwrap_payload(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [_unwrap_payload(value) for value in payload]
+    return payload
+
+
 class SessionRuntime:
     def __init__(
         self,
@@ -47,6 +66,7 @@ class SessionRuntime:
         self._state_lock = threading.RLock()
         self._units_by_mode_intent: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
         self._unit_owner_by_id: dict[str, tuple[str, str]] = {}
+        self._content_metadata_by_id = self._build_content_metadata_by_id(catalog)
         self._evaluator = evaluate_concept_recall if evaluator is None else evaluator
 
         with self._state_lock:
@@ -132,6 +152,39 @@ class SessionRuntime:
             return [
                 copy.deepcopy(event) for event in self._events if event["session_id"] == session_id
             ]
+
+    def list_manual_launch_options(
+        self,
+        mode: str,
+        session_intent: str,
+    ) -> list[dict[str, Any]]:
+        with self._state_lock:
+            units = self._units_by_mode_intent.get((mode, session_intent))
+            if units is None:
+                raise UnitModeIntentMismatchError(
+                    "unsupported runtime mode/session_intent combination: {0}/{1}".format(
+                        mode,
+                        session_intent,
+                    )
+                )
+
+            launch_options = []
+            for unit in units.values():
+                content_ids = unit.get("source_content_ids", [])
+                content_id = content_ids[0] if content_ids else None
+                content_metadata = self._content_metadata_by_id.get(content_id, {})
+                launch_options.append(
+                    {
+                        "unit_id": unit["id"],
+                        "content_id": content_id,
+                        "topic_slug": content_metadata.get("topic_slug"),
+                        "display_title": content_metadata.get("display_title"),
+                        "visible_prompt": unit["visible_prompt"],
+                        "effective_difficulty": unit["effective_difficulty"],
+                    }
+                )
+
+            return copy.deepcopy(launch_options)
 
     def submit_answer(
         self,
@@ -368,3 +421,32 @@ class SessionRuntime:
 
     def _utc_now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _build_content_metadata_by_id(
+        self,
+        catalog: dict[str, dict[str, Any]],
+    ) -> dict[str, dict[str, str]]:
+        content_metadata_by_id = {}
+        for topic_slug, bundle in catalog.items():
+            topic_package = bundle.get("topic_package", {})
+            canonical_content = topic_package.get("canonical_content", {})
+            if not isinstance(canonical_content, dict):
+                canonical_content = {}
+            concepts = canonical_content.get("concepts", [])
+            if not isinstance(concepts, list):
+                continue
+
+            for concept in concepts:
+                if not isinstance(concept, dict):
+                    continue
+                content_id = _unwrap_payload(concept.get("id"))
+                display_title = _unwrap_payload(concept.get("title"))
+                if isinstance(content_id, str) and content_id:
+                    content_metadata_by_id[content_id] = {
+                        "topic_slug": topic_slug,
+                        "display_title": (
+                            display_title if isinstance(display_title, str) else topic_slug
+                        ),
+                    }
+
+        return content_metadata_by_id

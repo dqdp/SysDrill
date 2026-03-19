@@ -2,14 +2,19 @@
 
 ## Current posture
 
-Implementation has crossed from tooling into a usable read-only backend content surface.
+Implementation has crossed from backend-only prototype work into a learner-visible
+manual end-to-end shell.
 
 The importer exporter MVP, content bundle reader, content catalog API, first
 `ExecutableLearningUnit` materialization path, and manual runtime bootstrap are
 complete. Deterministic review over that manual session loop is also complete,
-and GitHub-native verification plus bounded smoke coverage are now in place.
-The next critical path item is a thin frontend or equivalent demo path over the
-verified backend loop.
+GitHub-native verification plus bounded smoke coverage are now in place, and a
+thin frontend shell now exercises the bounded launcher-to-review path. Current
+product feedback shows that the existing `Practice` units are too close to
+`Study`, but current conclusions are still based on a very small imported
+content sample. A bounded corpus sweep and `Practice` prompt differentiation are
+now both complete, so the next critical path item is recommendation-driven
+session start over that improved bounded action space.
 
 ## Prototype target
 
@@ -25,14 +30,14 @@ Recommendation is intentionally not required for the first prototype milestone.
 
 ## Current active milestone
 
-- `Milestone B. Manual end-to-end prototype`
-- fast-path order: `005 -> 006 -> 006b -> 008`
+- `Milestone C. Practice differentiation and guided next-step prototype`
+- fast-path order: `006c0 -> 006c -> 007`
 
 ## Current active slice
 
-- roadmap item `008. Practice frontend shell`
-- next code change should connect a thin UI or equivalent demo path to the
-  now-verified manual runtime loop
+- roadmap item `007. Recommendation placeholder`
+- next code change should replace manual launch as the primary happy path
+  without collapsing recommendation into runtime orchestration
 
 ## Completed
 
@@ -168,6 +173,80 @@ Delivered:
 - fixture-based backend manual reviewed loop smoke coverage
 - green local verification for lint, format-check, unit tests, and smoke tests
 
+### 008. Practice frontend shell
+
+Status:
+- completed in current worktree
+
+Delivered:
+- minimal TypeScript frontend shell under `frontend/`
+- narrow backend launcher endpoint for backend-owned manual launch options
+- learner-visible launcher, answer, evaluation, and review flow over the
+  existing manual reviewed loop
+- frontend verification commands wired into the root `Makefile`
+- GitHub workflow coverage for frontend test and build verification
+- browser-level demo verification against the local backend and frontend dev
+  servers
+
+## Planned next
+
+### 006c0. Bounded corpus acquisition and quality sweep
+
+Status:
+- completed in current worktree
+
+Intent:
+- replace the current tiny imported sample with a wider bounded corpus and
+  produce a quality summary over what the importer actually materializes
+
+Guardrails:
+- keep crawl scope bounded and chapter-only
+- keep the resulting export root separate from fixtures
+- do not change product contracts during this slice
+
+Delivered:
+- bounded discovery from the site root
+- a curated `10`-chapter technical corpus slice under
+  `.tmp/sds-importer/corpus-slice-01/exports/`
+- quality sweep confirming schema-valid but recall-only draft bundles
+- backend compatibility verification over the new export root
+
+### 006c. Practice prompt expansion
+
+Status:
+- completed in current worktree
+
+Intent:
+- enrich `Practice` prompt framing from existing concept metadata so that the
+  current launcher and future recommendation layer operate over a more
+  meaningful action difference than “same concept, nearly same prompt”
+
+Guardrails:
+- stay inside `concept_recall`
+- keep `binding.concept_recall.v1`
+- avoid introducing scenario-family semantics early
+
+Delivered:
+- richer `Practice` prompt materialization over existing concept metadata
+- deterministic fallback when optional prompt fields are empty
+- unchanged `concept_recall` binding, runtime transitions, and API payloads
+- regression coverage at materializer, runtime service, and API layers
+
+### 007. Recommendation placeholder
+
+Status:
+- planned
+
+Intent:
+- replace manual launch as the main learner path with one bounded,
+  deterministic recommendation action over the now-wider and better-differentiated
+  concept action space
+
+Guardrails:
+- recommendation returns a structured action, not a raw `unit_id`
+- runtime remains the owner of action resolution and session creation
+- learner-state mutation still does not bypass events or evaluation
+
 ## Known risks
 
 - exported bundles are still review-first artifacts, not approved canonical content
@@ -183,7 +262,7 @@ Delivered:
 
 ## Exit condition for current phase
 
-The current phase is complete when one learner can manually launch a bounded
-session over a materialized `ExecutableLearningUnit`, submit an answer, emit
-append-only semantic events, and receive deterministic review through the
-backend plus a thin UI or equivalent demo path.
+The current phase is complete when:
+- recommendation can then return one bounded next-step action and runtime can
+  start from that action without changing the manual prototype loop semantics
+  already demonstrated in Milestone B

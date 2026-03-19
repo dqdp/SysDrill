@@ -91,6 +91,24 @@ def create_app(
         except SessionRuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/runtime/manual-launch-options")
+    def get_manual_launch_options(mode: str, session_intent: str) -> dict:
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            return {
+                "mode": mode,
+                "session_intent": session_intent,
+                "items": runtime.list_manual_launch_options(
+                    mode=mode,
+                    session_intent=session_intent,
+                ),
+            }
+        except UnitModeIntentMismatchError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SessionRuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/runtime/sessions/{session_id}")
     def get_runtime_session(session_id: str) -> dict:
         if runtime is None:
