@@ -95,6 +95,38 @@ class LearnerSummaryRuleTest(unittest.TestCase):
 
         self.assertEqual(summary["readiness_summary"]["category"], "stabilize_first")
 
+    def test_mock_only_evidence_keeps_readiness_non_empty_without_scenario_weak_areas(self):
+        summary = build_learner_summary(
+            {
+                "user_id": "user-1",
+                "concept_state": {},
+                "subskill_state": {
+                    "tradeoff_reasoning": {
+                        "proficiency_estimate": 0.74,
+                        "confidence": 0.31,
+                        "last_evidence_at": "2026-03-21T10:00:00Z",
+                    },
+                    "communication_clarity": {
+                        "proficiency_estimate": 0.71,
+                        "confidence": 0.29,
+                        "last_evidence_at": "2026-03-21T10:00:00Z",
+                    },
+                },
+                "trajectory_state": {
+                    "recent_fatigue_signal": 0.0,
+                    "recent_abandonment_signal": 0.0,
+                    "mock_readiness_estimate": 0.24,
+                    "mock_readiness_confidence": 0.2,
+                    "last_active_at": "2026-03-21T10:00:00Z",
+                },
+                "last_updated_at": "2026-03-21T10:00:00Z",
+            }
+        )
+
+        self.assertEqual(summary["weak_areas"], [])
+        self.assertEqual(summary["review_due"], [])
+        self.assertEqual(summary["readiness_summary"]["category"], "not_ready_yet")
+
 
 class LearnerSummaryApiTest(unittest.TestCase):
     def setUp(self):

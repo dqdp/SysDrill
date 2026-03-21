@@ -31,6 +31,10 @@ class RecommendationEngineTest(unittest.TestCase):
         self.runtime = SessionRuntime(self.catalog)
         self.engine = RecommendationEngine(self.runtime)
         self.study_unit_id = "elu.concept_recall.study.learn_new.concept.alpha-topic"
+        self.mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.url-shortener.basic"
+        )
 
     def test_next_recommendation_prefers_study_learn_new_when_no_reviewed_history_exists(self):
         decision = self.engine.next_recommendation(user_id="demo-user")
@@ -522,6 +526,128 @@ class RecommendationEngineTest(unittest.TestCase):
 
         self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
         self.assertEqual(decision["chosen_action"]["session_intent"], "SpacedReview")
+
+    def test_next_recommendation_avoids_immediate_repeat_after_reviewed_mock_attempt(self):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would begin with redirect reads, a durable mapping store, "
+                "and id generation because the workload is read-heavy."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would use a counter or random-id approach with collision checks "
+                "and cache the redirect path."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.71,
+                            "review_due_risk": 0.2,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.76,
+                            "confidence": 0.68,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                        "communication_clarity": {
+                            "proficiency_estimate": 0.74,
+                            "confidence": 0.67,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.05,
+                        "recent_abandonment_signal": 0.1,
+                        "mock_readiness_estimate": 0.34,
+                        "mock_readiness_confidence": 0.24,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
+        self.assertIn("recent_mock_attempt", decision["blocking_signals"])
+
+    def test_next_recommendation_suppresses_mock_more_strongly_after_abandoned_mock(self):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        self.runtime.abandon_session(session["session_id"], abandon_reason="explicit_exit")
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.71,
+                            "review_due_risk": 0.2,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.76,
+                            "confidence": 0.68,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                        "communication_clarity": {
+                            "proficiency_estimate": 0.74,
+                            "confidence": 0.67,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.05,
+                        "recent_abandonment_signal": 0.18,
+                        "mock_readiness_estimate": 0.34,
+                        "mock_readiness_confidence": 0.24,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
+        self.assertIn("recent_mock_abandonment", decision["blocking_signals"])
 
 
 if __name__ == "__main__":

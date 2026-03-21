@@ -165,7 +165,7 @@ def _build_trajectory_state(
     abandoned_session_count: int,
     last_active_at: str | None,
 ) -> dict[str, Any]:
-    if not concept_state and abandoned_session_count == 0:
+    if not concept_state and not subskill_state and abandoned_session_count == 0:
         return {
             "recent_fatigue_signal": 0.0,
             "recent_abandonment_signal": 0.0,
@@ -344,6 +344,8 @@ def _average_from_state(state: dict[str, dict[str, Any]], field: str) -> float:
 def _session_content_id(session: dict[str, Any]) -> str | None:
     current_unit = session.get("current_unit")
     if not isinstance(current_unit, dict):
+        return None
+    if current_unit.get("unit_family") == "scenario_readiness_check":
         return None
     source_content_ids = current_unit.get("source_content_ids", [])
     if not isinstance(source_content_ids, list) or not source_content_ids:

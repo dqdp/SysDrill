@@ -205,6 +205,7 @@ class RecommendationEngine:
         latest_outcomes = recommendation_context["latest_outcomes"]
         recent_patterns = recommendation_context["recent_accepted_patterns"]
         trajectory_state = recommendation_context["trajectory_state"]
+        recent_mock_feedback = recommendation_context["recent_mock_feedback"]
         seen_targets = set(concept_state)
 
         learn_new_targets = {
@@ -245,6 +246,17 @@ class RecommendationEngine:
             concept_state=concept_state,
             trajectory_state=trajectory_state,
         )
+        if recent_mock_feedback is not None:
+            filtered_records = [
+                record
+                for record in filtered_records
+                if (
+                    record["action"]["mode"] != "MockInterview"
+                    or record["action"]["session_intent"] != "ReadinessCheck"
+                )
+            ]
+            mock_record = None
+            blocking_signals.append(recent_mock_feedback["signal"])
         if mock_record is None:
             filtered_records = [
                 record
@@ -498,6 +510,7 @@ class RecommendationEngine:
             "review_due_targets": review_due_targets,
             "candidate_records": candidate_records,
             "recent_accepted_patterns": self._recent_accepted_patterns(user_id),
+            "recent_mock_feedback": self._recent_mock_feedback(user_id),
             "policy_version": "bootstrap.recommendation.v1",
         }
 
@@ -605,6 +618,49 @@ class RecommendationEngine:
             return None
         return mock_records[0]
 
+    def _recent_mock_feedback(self, user_id: str) -> dict[str, str] | None:
+        latest_session_id = None
+        latest_session_at: tuple[int, str] | None = None
+        latest_mock_session_id = None
+        latest_mock_session_at: tuple[int, str] | None = None
+        latest_mock_state = None
+
+        for session in self._runtime.list_user_sessions(user_id):
+            session_id = session.get("session_id")
+            if not isinstance(session_id, str) or not session_id:
+                continue
+            session_at = _latest_event_timestamp(self._runtime.list_session_events(session_id))
+            session_sort_key = _timestamp_sort_key(session_at)
+            if latest_session_at is not None and session_sort_key <= latest_session_at:
+                continue
+            latest_session_at = session_sort_key
+            latest_session_id = session_id
+
+        for session in self._runtime.list_user_sessions(user_id):
+            if (
+                session.get("mode") != "MockInterview"
+                or session.get("session_intent") != "ReadinessCheck"
+            ):
+                continue
+            if session.get("state") not in {"review_presented", "completed", "abandoned"}:
+                continue
+            session_id = session.get("session_id")
+            if not isinstance(session_id, str) or not session_id:
+                continue
+            session_at = _latest_event_timestamp(self._runtime.list_session_events(session_id))
+            session_sort_key = _timestamp_sort_key(session_at)
+            if latest_mock_session_at is not None and session_sort_key <= latest_mock_session_at:
+                continue
+            latest_mock_session_at = session_sort_key
+            latest_mock_session_id = session_id
+            latest_mock_state = session.get("state")
+
+        if latest_mock_session_id is None or latest_mock_session_id != latest_session_id:
+            return None
+        if latest_mock_state == "abandoned":
+            return {"signal": "recent_mock_abandonment"}
+        return {"signal": "recent_mock_attempt"}
+
     def _next_decision_id(self) -> str:
         self._decision_counter += 1
         return "rec.{0:04d}".format(self._decision_counter)
@@ -687,6 +743,22 @@ def _timestamp_sort_key(value: Any) -> tuple[int, str]:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return (0, parsed.astimezone(timezone.utc).isoformat())
+
+
+def _latest_event_timestamp(events: list[dict[str, Any]]) -> str | None:
+    latest_value = None
+    latest_key = None
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        occurred_at = event.get("occurred_at")
+        sort_key = _timestamp_sort_key(occurred_at)
+        if sort_key[0] != 0:
+            continue
+        if latest_key is None or sort_key > latest_key:
+            latest_key = sort_key
+            latest_value = occurred_at
+    return latest_value
 
 
 def _average_hint_dependency_signal(concept_state: dict[str, dict[str, Any]]) -> float:

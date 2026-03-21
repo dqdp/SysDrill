@@ -2,22 +2,31 @@
 
 ## Status
 
-- blocked
+- completed
+
+Execution is now split across:
+- `013a_url_shortener_scenario_seed.md`
+- `013b_mock_readiness_runtime_vertical.md`
+- `013c_mock_outcome_projection_feedback.md`
+
+Status of child slices:
+- `013a` completed
+- `013b` completed
+- `013c` completed
 
 ## Execution posture
 
-`013` is conditional on executable mock content readiness. After `011` and
-`012`, implementation should proceed only if the repository can support one
-bounded `MockInterview / ReadinessCheck` scenario-family path without violating
-the current binding docs or faking a mock experience on top of
-`concept_recall`.
+`013` started as conditional on executable mock content readiness. That blocker
+has now been removed by `013a`, and the first bounded mock runtime path has
+been implemented in `013b`.
 
-Current blocker after repository verification:
-- `executable_learning_unit_materializer.py` only supports `concept_recall`
-  units for `Study` and `Practice`
-- `concept_recall_binding_v1.md` explicitly rejects `MockInterview`
-- fixture content bundles currently expose `scenarios: []`, so there is no
-  bounded scenario-family path to materialize or evaluate
+Current repository posture:
+- one bounded `MockInterview / ReadinessCheck` scenario-family path exists for
+  `URL Shortener`
+- runtime, evaluation, recommendation unlock, and minimal UI are already
+  verticalized for that path
+- the remaining open item is downstream feedback from mock outcomes into
+  learner projection and later recommendation behavior, now isolated as `013c`
 
 ## Goal
 

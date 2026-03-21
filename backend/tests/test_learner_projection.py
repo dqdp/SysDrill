@@ -473,6 +473,10 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
         export_root = Path(__file__).parent / "fixtures" / "export_root"
         self.catalog = load_topic_catalog(export_root, allow_draft_bundles=True)
         self.study_unit_id = "elu.concept_recall.study.learn_new.concept.alpha-topic"
+        self.mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.url-shortener.basic"
+        )
 
     def test_runtime_exposes_user_sessions_for_projection(self):
         runtime = SessionRuntime(self.catalog)
@@ -550,6 +554,61 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
         concept = profile["concept_state"]["concept.alpha-topic"]
         self.assertGreater(concept["hint_dependency_signal"], 0.0)
         self.assertGreater(concept["review_due_risk"], 0.0)
+
+    def test_projector_keeps_mock_reviewed_history_out_of_concept_state(self):
+        runtime = SessionRuntime(self.catalog)
+        projector = LearnerProjector()
+        session = runtime.start_manual_session(
+            user_id="user-1",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would start with redirect reads, durable mapping storage, "
+                "and short-id generation because the service is read-heavy."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would use a counter or random-id strategy with collision checks "
+                "and cache the redirect path."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        runtime.evaluate_pending_session(session["session_id"])
+
+        profile = projector.build_profile(runtime, user_id="user-1")
+
+        self.assertEqual(profile["concept_state"], {})
+        self.assertIn("tradeoff_reasoning", profile["subskill_state"])
+        self.assertIn("communication_clarity", profile["subskill_state"])
+        self.assertGreater(profile["trajectory_state"]["mock_readiness_estimate"], 0.0)
+        self.assertGreater(profile["trajectory_state"]["mock_readiness_confidence"], 0.0)
+
+    def test_projector_treats_abandoned_mock_as_trajectory_only_signal(self):
+        runtime = SessionRuntime(self.catalog)
+        projector = LearnerProjector()
+        session = runtime.start_manual_session(
+            user_id="user-1",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        runtime.abandon_session(session["session_id"], abandon_reason="explicit_exit")
+
+        profile = projector.build_profile(runtime, user_id="user-1")
+
+        self.assertEqual(profile["concept_state"], {})
+        self.assertEqual(profile["subskill_state"], {})
+        self.assertGreater(profile["trajectory_state"]["recent_abandonment_signal"], 0.0)
+        self.assertGreater(profile["trajectory_state"]["recent_fatigue_signal"], 0.0)
 
 
 def reviewed_session(
