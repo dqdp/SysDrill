@@ -2,6 +2,8 @@ import { startTransition, useEffect, useState } from "react";
 
 import {
   evaluateSession,
+  getRuntimeSession,
+  getReview,
   getNextRecommendation,
   getManualLaunchOptions,
   startRecommendedSession,
@@ -10,7 +12,18 @@ import {
   type EvaluateResponse,
   type LaunchOption,
   type RecommendationDecisionResponse,
+  type RuntimeSessionResponse,
 } from "./api";
+import {
+  clearSessionResumeEnvelope,
+  readSessionResumeEnvelope,
+  writeSessionResumeEnvelope,
+} from "./sessionResume";
+import {
+  clearStoredRecommendation,
+  readStoredRecommendation,
+  writeStoredRecommendation,
+} from "./recommendationResume";
 
 const LAUNCH_PROFILES = [
   {
@@ -54,31 +67,305 @@ export function App() {
   const [recommendationError, setRecommendationError] = useState("");
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(true);
   const [recommendationReloadKey, setRecommendationReloadKey] = useState(0);
+  const [restoreAttemptKey, setRestoreAttemptKey] = useState(0);
+  const [restoreError, setRestoreError] = useState("");
   const [launchOptions, setLaunchOptions] = useState<LaunchOption[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [launcherError, setLauncherError] = useState<string>("");
   const [phase, setPhase] = useState<Phase>("launcher");
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [isStartingSession, setIsStartingSession] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [visiblePrompt, setVisiblePrompt] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [answerSubmitted, setAnswerSubmitted] = useState(false);
   const [sessionError, setSessionError] = useState("");
   const [review, setReview] = useState<EvaluateResponse | null>(null);
 
   const activeProfile = LAUNCH_PROFILES[profileIndex] ?? LAUNCH_PROFILES[0];
   const isLauncherPhase = phase === "launcher";
+  const shouldLoadLauncherData = isLauncherPhase && !isRestoringSession && !restoreError;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreSession() {
+      const envelope = readSessionResumeEnvelope();
+      if (envelope === null) {
+        if (cancelled) {
+          return;
+        }
+        startTransition(() => {
+          setRestoreError("");
+          setIsRestoringSession(false);
+        });
+        return;
+      }
+
+      try {
+        const session = await getRuntimeSession(envelope.sessionId);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (isPreAnswerState(session.state)) {
+          startTransition(() => {
+            applySessionState({
+              answerSubmitted: false,
+              phase: "session",
+              profileIndex: profileIndexFor(session.mode, session.session_intent),
+              review: null,
+              session,
+              setAnswerSubmitted,
+              setPhase,
+              setProfileIndex,
+              setReview,
+              setSessionError,
+              setSessionId,
+              setTranscript,
+              setVisiblePrompt,
+              transcript: envelope.transcript,
+            });
+            setRestoreError("");
+            setIsRestoringSession(false);
+          });
+          return;
+        }
+
+        if (requiresReviewRecovery(session.state)) {
+          startTransition(() => {
+            applySessionState({
+              answerSubmitted: true,
+              phase: "submitting",
+              profileIndex: profileIndexFor(session.mode, session.session_intent),
+              review: null,
+              session,
+              setAnswerSubmitted,
+              setPhase,
+              setProfileIndex,
+              setReview,
+              setSessionError,
+              setSessionId,
+              setTranscript,
+              setVisiblePrompt,
+              transcript: envelope.transcript,
+            });
+          });
+
+          try {
+            const restoredReview = await evaluateOrLoadReview(session.session_id);
+            if (cancelled) {
+              return;
+            }
+            startTransition(() => {
+              applySessionState({
+                answerSubmitted: true,
+                phase: "review",
+                profileIndex: profileIndexFor(session.mode, session.session_intent),
+                review: restoredReview,
+                session,
+                setAnswerSubmitted,
+                setPhase,
+                setProfileIndex,
+                setReview,
+                setSessionError,
+                setSessionId,
+                setTranscript,
+                setVisiblePrompt,
+                transcript: envelope.transcript,
+              });
+              setRestoreError("");
+              setIsRestoringSession(false);
+            });
+            return;
+          } catch (error) {
+            if (cancelled) {
+              return;
+            }
+            startTransition(() => {
+              applySessionState({
+                answerSubmitted: true,
+                phase: "session",
+                profileIndex: profileIndexFor(session.mode, session.session_intent),
+                review: null,
+                session,
+                setAnswerSubmitted,
+                setPhase,
+                setProfileIndex,
+                setReview,
+                setSessionError,
+                setSessionId,
+                setTranscript,
+                setVisiblePrompt,
+                transcript: envelope.transcript,
+              });
+              setSessionError(errorMessage(error));
+              setIsRestoringSession(false);
+            });
+            return;
+          }
+        }
+
+        if (session.state === "review_presented") {
+          startTransition(() => {
+            applySessionState({
+              answerSubmitted: true,
+              phase: "submitting",
+              profileIndex: profileIndexFor(session.mode, session.session_intent),
+              review: null,
+              session,
+              setAnswerSubmitted,
+              setPhase,
+              setProfileIndex,
+              setReview,
+              setSessionError,
+              setSessionId,
+              setTranscript,
+              setVisiblePrompt,
+              transcript: envelope.transcript,
+            });
+          });
+
+          try {
+            const restoredReview = await getReview(session.session_id);
+            if (cancelled) {
+              return;
+            }
+            startTransition(() => {
+              applySessionState({
+                answerSubmitted: true,
+                phase: "review",
+                profileIndex: profileIndexFor(session.mode, session.session_intent),
+                review: restoredReview,
+                session,
+                setAnswerSubmitted,
+                setPhase,
+                setProfileIndex,
+                setReview,
+                setSessionError,
+                setSessionId,
+                setTranscript,
+                setVisiblePrompt,
+                transcript: envelope.transcript,
+              });
+              setRestoreError("");
+              setIsRestoringSession(false);
+            });
+            return;
+          } catch (error) {
+            if (cancelled) {
+              return;
+            }
+            startTransition(() => {
+              applySessionState({
+                answerSubmitted: true,
+                phase: "session",
+                profileIndex: profileIndexFor(session.mode, session.session_intent),
+                review: null,
+                session,
+                setAnswerSubmitted,
+                setPhase,
+                setProfileIndex,
+                setReview,
+                setSessionError,
+                setSessionId,
+                setTranscript,
+                setVisiblePrompt,
+                transcript: envelope.transcript,
+              });
+              setSessionError(errorMessage(error));
+              setIsRestoringSession(false);
+            });
+            return;
+          }
+        }
+
+        clearSessionResumeEnvelope();
+        if (cancelled) {
+          return;
+        }
+        startTransition(() => {
+          setSessionId("");
+          setVisiblePrompt("");
+          setTranscript("");
+          setAnswerSubmitted(false);
+          setSessionError("");
+          setReview(null);
+          setRestoreError("");
+          setPhase("launcher");
+          setIsRestoringSession(false);
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if (isMissingSessionError(error)) {
+          clearSessionResumeEnvelope();
+        }
+        startTransition(() => {
+          setSessionId("");
+          setVisiblePrompt("");
+          setTranscript("");
+          setAnswerSubmitted(false);
+          setSessionError("");
+          setReview(null);
+          setPhase("launcher");
+          setRestoreError(isMissingSessionError(error) ? "" : errorMessage(error));
+          setIsRestoringSession(false);
+        });
+      }
+    }
+
+    void restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [restoreAttemptKey]);
+
+  useEffect(() => {
+    if (isRestoringSession) {
+      return;
+    }
+    if (restoreError) {
+      return;
+    }
+    if (!sessionId || phase === "launcher") {
+      clearSessionResumeEnvelope();
+      return;
+    }
+    if (phase === "review") {
+      clearSessionResumeEnvelope();
+      return;
+    }
+    writeSessionResumeEnvelope({
+      sessionId,
+      transcript,
+      answerSubmitted,
+    });
+  }, [answerSubmitted, isRestoringSession, phase, restoreError, sessionId, transcript]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadRecommendation() {
-      if (!isLauncherPhase) {
+      if (!shouldLoadLauncherData) {
         return;
       }
 
       setIsLoadingRecommendation(true);
       setRecommendationError("");
+      const storedRecommendation =
+        recommendationReloadKey === 0 ? readStoredRecommendation() : null;
+      if (storedRecommendation !== null) {
+        startTransition(() => {
+          setRecommendation(storedRecommendation);
+          setIsLoadingRecommendation(false);
+        });
+        return;
+      }
       setRecommendation(null);
 
       try {
@@ -92,6 +379,7 @@ export function App() {
           setRecommendation(response);
           setIsLoadingRecommendation(false);
         });
+        writeStoredRecommendation(response);
       } catch (error) {
         if (cancelled) {
           return;
@@ -109,13 +397,13 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [isLauncherPhase, recommendationReloadKey]);
+  }, [recommendationReloadKey, shouldLoadLauncherData]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadLaunchOptions() {
-      if (!isLauncherPhase) {
+      if (!shouldLoadLauncherData) {
         return;
       }
 
@@ -156,7 +444,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProfile.mode, activeProfile.sessionIntent, isLauncherPhase]);
+  }, [activeProfile.mode, activeProfile.sessionIntent, shouldLoadLauncherData]);
 
   async function handleStartRecommendedSession() {
     if (!recommendation) {
@@ -166,6 +454,7 @@ export function App() {
 
     setIsStartingSession(true);
     setSessionError("");
+    clearStoredRecommendation();
 
     try {
       const response = await startRecommendedSession(
@@ -183,6 +472,7 @@ export function App() {
         setSessionId(response.session_id);
         setVisiblePrompt(response.current_unit.visible_prompt);
         setTranscript("");
+        setAnswerSubmitted(false);
         setReview(null);
         setPhase("session");
         setIsStartingSession(false);
@@ -203,6 +493,7 @@ export function App() {
 
     setIsStartingSession(true);
     setSessionError("");
+    clearStoredRecommendation();
 
     try {
       const response = await startManualSession(
@@ -215,6 +506,7 @@ export function App() {
         setSessionId(response.session_id);
         setVisiblePrompt(response.current_unit.visible_prompt);
         setTranscript("");
+        setAnswerSubmitted(false);
         setReview(null);
         setPhase("session");
         setIsStartingSession(false);
@@ -232,24 +524,30 @@ export function App() {
       setSessionError("Start a session before submitting an answer.");
       return;
     }
-    if (!transcript.trim()) {
+    if (!answerSubmitted && !transcript.trim()) {
       setSessionError("Write an answer before requesting review.");
       return;
     }
 
     setSessionError("");
     setPhase("submitting");
+    let submissionAccepted = answerSubmitted;
 
     try {
-      await submitAnswer(sessionId, transcript);
-      const evaluateResponse = await evaluateSession(sessionId);
+      if (!submissionAccepted) {
+        await submitAnswer(sessionId, transcript);
+        submissionAccepted = true;
+      }
+      const evaluateResponse = await evaluateOrLoadReview(sessionId);
 
       startTransition(() => {
+        setAnswerSubmitted(true);
         setReview(evaluateResponse);
         setPhase("review");
       });
     } catch (error) {
       startTransition(() => {
+        setAnswerSubmitted(submissionAccepted);
         setSessionError(errorMessage(error));
         setPhase("session");
       });
@@ -257,16 +555,46 @@ export function App() {
   }
 
   function handleReset() {
+    clearSessionResumeEnvelope();
+    clearStoredRecommendation();
     startTransition(() => {
       setPhase("launcher");
       setSessionId("");
       setVisiblePrompt("");
       setTranscript("");
+      setAnswerSubmitted(false);
       setSessionError("");
       setReview(null);
       setRecommendation(null);
       setRecommendationError("");
+      setRestoreError("");
       setRecommendationReloadKey((value) => value + 1);
+    });
+  }
+
+  function handleRetryRestore() {
+    startTransition(() => {
+      setRestoreError("");
+      setIsRestoringSession(true);
+      setRecommendation(null);
+      setRecommendationError("");
+      setLaunchOptions([]);
+      setLauncherError("");
+      setRestoreAttemptKey((value) => value + 1);
+    });
+  }
+
+  function handleDiscardSavedSession() {
+    clearSessionResumeEnvelope();
+    startTransition(() => {
+      setRestoreError("");
+      setSessionId("");
+      setVisiblePrompt("");
+      setTranscript("");
+      setAnswerSubmitted(false);
+      setSessionError("");
+      setReview(null);
+      setPhase("launcher");
     });
   }
 
@@ -298,7 +626,27 @@ export function App() {
             ) : null}
           </div>
 
-          {phase === "launcher" ? (
+          {phase === "launcher" && restoreError ? (
+            <div className="launcher-section">
+              <p className="error-banner">{restoreError}</p>
+              <button
+                className="primary-button"
+                onClick={handleRetryRestore}
+                type="button"
+              >
+                Retry saved session
+              </button>
+              <button
+                className="ghost-button"
+                onClick={handleDiscardSavedSession}
+                type="button"
+              >
+                Discard saved session
+              </button>
+            </div>
+          ) : null}
+
+          {phase === "launcher" && !restoreError ? (
             <div className="launcher-section">
               <div className="launcher-header">
                 <div>
@@ -366,7 +714,7 @@ export function App() {
             })}
           </div>
 
-          {phase === "launcher" ? (
+          {phase === "launcher" && !restoreError ? (
             <div className="launcher-section">
               <div className="launcher-header">
                 <div>
@@ -433,6 +781,7 @@ export function App() {
               <label className="answer-field">
                 <span>Your answer</span>
                 <textarea
+                  disabled={answerSubmitted}
                   onChange={(event) => setTranscript(event.target.value)}
                   placeholder="Explain the concept in your own words, when to use it, and the trade-offs."
                   rows={10}
@@ -516,6 +865,61 @@ function errorMessage(error: unknown): string {
   }
 
   return "Unexpected error";
+}
+
+async function evaluateOrLoadReview(sessionId: string): Promise<EvaluateResponse> {
+  try {
+    return await evaluateSession(sessionId);
+  } catch (evaluationError) {
+    try {
+      return await getReview(sessionId);
+    } catch {
+      throw evaluationError;
+    }
+  }
+}
+
+function applySessionState(payload: {
+  answerSubmitted: boolean;
+  phase: Phase;
+  profileIndex: number;
+  review: EvaluateResponse | null;
+  session: RuntimeSessionResponse;
+  setAnswerSubmitted: (value: boolean) => void;
+  setPhase: (value: Phase) => void;
+  setProfileIndex: (value: number) => void;
+  setReview: (value: EvaluateResponse | null) => void;
+  setSessionError: (value: string) => void;
+  setSessionId: (value: string) => void;
+  setTranscript: (value: string) => void;
+  setVisiblePrompt: (value: string) => void;
+  transcript: string;
+}): void {
+  payload.setProfileIndex(payload.profileIndex);
+  payload.setSessionId(payload.session.session_id);
+  payload.setVisiblePrompt(payload.session.current_unit.visible_prompt);
+  payload.setTranscript(payload.transcript);
+  payload.setAnswerSubmitted(payload.answerSubmitted);
+  payload.setSessionError("");
+  payload.setReview(payload.review);
+  payload.setPhase(payload.phase);
+}
+
+function isPreAnswerState(state: string): boolean {
+  return (
+    state === "planned" ||
+    state === "started" ||
+    state === "unit_presented" ||
+    state === "awaiting_answer"
+  );
+}
+
+function requiresReviewRecovery(state: string): boolean {
+  return state === "submitted" || state === "evaluation_pending" || state === "evaluated";
+}
+
+function isMissingSessionError(error: unknown): boolean {
+  return errorMessage(error).includes("unknown session_id");
 }
 
 function profileIndexFor(mode: string, sessionIntent: string): number {

@@ -69,26 +69,6 @@ class RecommendationEngineTest(unittest.TestCase):
                     "session_size": "single_unit",
                     "delivery_profile": "text_first",
                 },
-                {
-                    "mode": "Practice",
-                    "session_intent": "Reinforce",
-                    "target_type": "concept",
-                    "target_id": "concept.alpha-topic",
-                    "difficulty_profile": "standard",
-                    "strictness_profile": "standard",
-                    "session_size": "single_unit",
-                    "delivery_profile": "text_first",
-                },
-                {
-                    "mode": "Practice",
-                    "session_intent": "Remediate",
-                    "target_type": "concept",
-                    "target_id": "concept.alpha-topic",
-                    "difficulty_profile": "targeted",
-                    "strictness_profile": "standard",
-                    "session_size": "single_unit",
-                    "delivery_profile": "text_first",
-                },
             ],
         )
         self.assertEqual(
@@ -202,6 +182,14 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(third["chosen_action"]["session_intent"], "LearnNew")
         self.assertEqual(third["chosen_action"]["target_id"], "concept.beta-topic")
         self.assertIn("anti_loop_guardrail", third["blocking_signals"])
+        self.assertFalse(
+            any(
+                action["mode"] == "Study"
+                and action["session_intent"] == "LearnNew"
+                and action["target_id"] == "concept.alpha-topic"
+                for action in third["candidate_actions"]
+            )
+        )
 
     def test_next_recommendation_rejects_empty_candidate_space(self):
         empty_catalog = copy.deepcopy(self.catalog)

@@ -64,7 +64,8 @@ class RecommendationEngine:
                 "policy_version": "bootstrap.recommendation.v1",
                 "decision_mode": "rule_based",
                 "candidate_actions": [
-                    copy.deepcopy(record["action"]) for record in candidate_records
+                    copy.deepcopy(record["action"])
+                    for record in decision_context["candidate_records"]
                 ],
                 "chosen_action": copy.deepcopy(decision_context["chosen_action"]),
                 "supporting_signals": list(decision_context["supporting_signals"]),

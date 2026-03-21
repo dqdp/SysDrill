@@ -44,6 +44,19 @@ export type ManualSessionResponse = {
   session_id: string;
   state: string;
   recommendation_decision_id?: string | null;
+  mode?: string;
+  session_intent?: string;
+  current_unit: {
+    id: string;
+    visible_prompt: string;
+  };
+};
+
+export type RuntimeSessionResponse = {
+  session_id: string;
+  state: string;
+  mode: string;
+  session_intent: string;
   current_unit: {
     id: string;
     visible_prompt: string;
@@ -170,4 +183,14 @@ export async function evaluateSession(sessionId: string): Promise<EvaluateRespon
   return request<EvaluateResponse>(`/runtime/sessions/${sessionId}/evaluate`, {
     method: "POST",
   });
+}
+
+export async function getReview(sessionId: string): Promise<EvaluateResponse> {
+  return request<EvaluateResponse>(`/runtime/sessions/${sessionId}/review`);
+}
+
+export async function getRuntimeSession(
+  sessionId: string,
+): Promise<RuntimeSessionResponse> {
+  return request<RuntimeSessionResponse>(`/runtime/sessions/${sessionId}`);
 }
