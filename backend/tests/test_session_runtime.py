@@ -1152,7 +1152,7 @@ class SessionRuntimeApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_start_from_recommendation_endpoint_returns_409_for_reused_decision(self):
+    def test_start_from_recommendation_endpoint_replays_existing_session_for_reused_decision(self):
         recommendation_response = self.client.post(
             "/recommendations/next",
             json={"user_id": "demo-user"},
@@ -1177,7 +1177,51 @@ class SessionRuntimeApiTest(unittest.TestCase):
         )
 
         self.assertEqual(first_response.status_code, 200)
-        self.assertEqual(second_response.status_code, 409)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            second_response.json()["session_id"],
+            first_response.json()["session_id"],
+        )
+        self.assertEqual(second_response.json()["state"], "awaiting_answer")
+
+    def test_start_from_recommendation_replays_review_state(self):
+        recommendation_response = self.client.post(
+            "/recommendations/next",
+            json={"user_id": "demo-user"},
+        )
+        decision = recommendation_response.json()
+
+        first_response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": decision["decision_id"],
+                "action": decision["chosen_action"],
+            },
+        )
+        session_id = first_response.json()["session_id"]
+        self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": "Caching stores frequently used data for faster repeated access.",
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+        self.client.post("/runtime/sessions/{0}/evaluate".format(session_id))
+
+        replay_response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": decision["decision_id"],
+                "action": decision["chosen_action"],
+            },
+        )
+
+        self.assertEqual(replay_response.status_code, 200)
+        self.assertEqual(replay_response.json()["session_id"], session_id)
+        self.assertEqual(replay_response.json()["state"], "review_presented")
 
     def test_recommendations_next_endpoint_returns_503_without_runtime_content(self):
         client = TestClient(create_app())

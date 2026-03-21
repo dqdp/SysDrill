@@ -288,6 +288,59 @@ class RecommendationEngineTest(unittest.TestCase):
         stored = self.engine.get_decision(decision["decision_id"])
         self.assertEqual(stored["accepted_session_id"], "session.0001")
 
+    def test_accept_session_or_replay_returns_existing_accepted_session(self):
+        decision = self.engine.next_recommendation(user_id="demo-user")
+        starter_calls: list[str] = []
+        loader_calls: list[str] = []
+
+        def session_starter() -> dict[str, str]:
+            starter_calls.append("starter")
+            return {
+                "session_id": "session.0001",
+                "state": "awaiting_answer",
+            }
+
+        def accepted_session_loader(session_id: str) -> dict[str, str]:
+            loader_calls.append(session_id)
+            return {
+                "session_id": session_id,
+                "state": "review_presented",
+            }
+
+        first_session = self.engine.accept_session_or_replay(
+            decision["decision_id"],
+            session_starter=session_starter,
+            accepted_session_loader=accepted_session_loader,
+        )
+        replayed_session = self.engine.accept_session_or_replay(
+            decision["decision_id"],
+            session_starter=session_starter,
+            accepted_session_loader=accepted_session_loader,
+        )
+
+        self.assertEqual(first_session["session_id"], "session.0001")
+        self.assertEqual(replayed_session["session_id"], "session.0001")
+        self.assertEqual(starter_calls, ["starter"])
+        self.assertEqual(loader_calls, ["session.0001"])
+        stored = self.engine.get_decision(decision["decision_id"])
+        self.assertEqual(stored["accepted_session_id"], "session.0001")
+
+    def test_accept_session_or_replay_fails_closed_when_accepted_session_cannot_be_loaded(self):
+        decision = self.engine.next_recommendation(user_id="demo-user")
+        self.engine.mark_accepted(decision["decision_id"], session_id="session.0001")
+
+        with self.assertRaisesRegex(
+            RecommendationDecisionLifecycleError,
+            "accepted session is not available",
+        ):
+            self.engine.accept_session_or_replay(
+                decision["decision_id"],
+                session_starter=lambda: {"session_id": "session.9999"},
+                accepted_session_loader=lambda session_id: (_ for _ in ()).throw(
+                    RuntimeError("missing session")
+                ),
+            )
+
     def test_mark_completed_requires_matching_accepted_session(self):
         decision = self.engine.next_recommendation(user_id="demo-user")
         self.engine.mark_accepted(decision["decision_id"], session_id="session.0001")

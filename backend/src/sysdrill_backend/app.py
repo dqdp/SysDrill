@@ -207,7 +207,7 @@ def create_app(
             )
 
         try:
-            session = recommendation_engine.accept_session(
+            session = recommendation_engine.accept_session_or_replay(
                 request.decision_id,
                 session_starter=lambda: runtime.start_session_from_recommendation(
                     user_id=request.user_id,
@@ -215,6 +215,7 @@ def create_app(
                     action=action,
                     source=request.source,
                 ),
+                accepted_session_loader=lambda session_id: runtime.get_session(session_id),
             )
             return session
         except RecommendationDecisionLifecycleError as exc:

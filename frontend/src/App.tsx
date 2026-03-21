@@ -521,11 +521,31 @@ export function App() {
       );
       clearStoredRecommendation();
 
+      if (!isPreAnswerState(response.state)) {
+        writeSessionResumeEnvelope({
+          sessionId: response.session_id,
+          transcript: "",
+          answerSubmitted: response.state !== "awaiting_answer",
+        });
+        startTransition(() => {
+          setSessionError("");
+          setRestoreError("");
+          setIsRestoringSession(true);
+          setRecommendation(null);
+          setRecommendationError("");
+          setLaunchOptions([]);
+          setLauncherError("");
+          setIsStartingSession(false);
+          setRestoreAttemptKey((value) => value + 1);
+        });
+        return;
+      }
+
       startTransition(() => {
         setProfileIndex(
           profileIndexFor(
-            recommendation.chosen_action.mode,
-            recommendation.chosen_action.session_intent,
+            response.mode ?? recommendation.chosen_action.mode,
+            response.session_intent ?? recommendation.chosen_action.session_intent,
           ),
         );
         setSessionId(response.session_id);

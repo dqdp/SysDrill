@@ -124,6 +124,38 @@ class RecommendationEngine:
             self._record_acceptance(decision, session_id)
             return session
 
+    def accept_session_or_replay(
+        self,
+        decision_id: str,
+        session_starter: Callable[[], dict[str, Any]],
+        accepted_session_loader: Callable[[str], dict[str, Any]],
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            decision = self._require_decision(decision_id)
+            accepted_session_id = decision.get("accepted_session_id")
+            if isinstance(accepted_session_id, str) and accepted_session_id:
+                try:
+                    session = accepted_session_loader(accepted_session_id)
+                except Exception as exc:  # pragma: no cover - normalized into lifecycle error
+                    raise RecommendationDecisionLifecycleError(
+                        "accepted session is not available for replay"
+                    ) from exc
+                session_id = session.get("session_id")
+                if not isinstance(session_id, str) or session_id != accepted_session_id:
+                    raise RecommendationDecisionLifecycleError(
+                        "accepted session is not available for replay"
+                    )
+                return session
+
+            session = session_starter()
+            session_id = session.get("session_id")
+            if not isinstance(session_id, str) or not session_id:
+                raise RecommendationDecisionLifecycleError(
+                    "accepted session must include a non-empty session_id"
+                )
+            self._record_acceptance(decision, session_id)
+            return session
+
     def mark_completed(self, decision_id: str, session_id: str) -> None:
         with self._state_lock:
             decision = self._require_decision(decision_id)

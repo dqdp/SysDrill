@@ -966,6 +966,168 @@ describe("App", () => {
     expect(screen.getByText("Saved recommendation.")).toBeInTheDocument();
   });
 
+  it("retries recommended start after a lost response without fetching a fresh recommendation", async () => {
+    setStoredRecommendation(recommendationPayloadData("Saved recommendation."));
+    fetchMock
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0200",
+          state: "awaiting_answer",
+          mode: "Study",
+          session_intent: "LearnNew",
+          recommendation_decision_id: "rec.0001",
+          current_unit: {
+            id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+            visible_prompt: "Explain caching.",
+          },
+        }),
+      );
+
+    render(<App />);
+
+    expect(await screen.findByText("Saved recommendation.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+    expect((await screen.findAllByText("Network error")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+
+    expect(
+      await screen.findByRole("textbox", {
+        name: "Your answer",
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(calls.filter((url) => url.includes("/recommendations/next"))).toHaveLength(0);
+    expect(calls.filter((url) => url.includes("/runtime/sessions/start-from-recommendation"))).toHaveLength(2);
+  });
+
+  it("routes a replayed recommended start into review recovery", async () => {
+    setStoredRecommendation(recommendationPayloadData("Saved recommendation."));
+    fetchMock
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0201",
+            state: "review_presented",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0201",
+            state: "review_presented",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(reviewPayload("session.0201"));
+
+    render(<App />);
+
+    expect(await screen.findByText("Saved recommendation.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+    expect((await screen.findAllByText("Network error")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+
+    expect(await screen.findByText("Weighted score")).toBeInTheDocument();
+    expect(screen.getByText("0.67")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+    });
+    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(calls.filter((url) => url.includes("/recommendations/next"))).toHaveLength(0);
+    expect(calls.filter((url) => url.endsWith("/runtime/sessions/session.0201"))).toHaveLength(1);
+    expect(calls.filter((url) => url.includes("/runtime/sessions/session.0201/review"))).toHaveLength(1);
+  });
+
+  it("returns to launcher and loads a fresh recommendation when replayed start is already terminal", async () => {
+    setStoredRecommendation(recommendationPayloadData("Saved recommendation."));
+    fetchMock
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0202",
+            state: "completed",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0202",
+            state: "completed",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        recommendationPayload("Fresh recommendation after terminal replay."),
+      )
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload());
+
+    render(<App />);
+
+    expect(await screen.findByText("Saved recommendation.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+    expect((await screen.findAllByText("Network error")).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+
+    expect(
+      await screen.findByText("Fresh recommendation after terminal replay."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Backend-provided manual options")).toBeInTheDocument();
+    expect(window.localStorage.getItem(RECOMMENDATION_STORAGE_KEY)).toContain(
+      "Fresh recommendation after terminal replay.",
+    );
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(8);
+    });
+    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(calls.filter((url) => url.includes("/recommendations/next"))).toHaveLength(1);
+    expect(calls.filter((url) => url.endsWith("/runtime/sessions/session.0202"))).toHaveLength(1);
+  });
+
   it("smoke-tests reload recovery through review and back to the launcher", async () => {
     setStoredSessionEnvelope({
       sessionId: "session.0090",
