@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/content": "http://127.0.0.1:8000",
+      "/learner": "http://127.0.0.1:8000",
       "/recommendations": "http://127.0.0.1:8000",
       "/runtime": "http://127.0.0.1:8000",
       "/health": "http://127.0.0.1:8000",

@@ -249,20 +249,15 @@ class RecommendationEngine:
                 and record["action"]["session_intent"] == "LearnNew"
             )
         }
-        unlocked_bound_targets = {
-            target_id for target_id in seen_targets if target_id in scenario_bound_concept_ids
-        }
-
         filtered_records = []
         for record in candidate_records:
             action = record["action"]
             target_id = action["target_id"]
-            if (
-                action["target_type"] == "concept"
-                and target_id in scenario_bound_concept_ids
-                and target_id not in unlocked_bound_targets
-            ):
-                continue
+            if action["target_type"] == "concept" and target_id in scenario_bound_concept_ids:
+                if not seen_targets:
+                    continue
+                if target_id not in seen_targets and action["session_intent"] != "LearnNew":
+                    continue
             if (
                 action["mode"] == "Practice"
                 and target_id not in seen_targets

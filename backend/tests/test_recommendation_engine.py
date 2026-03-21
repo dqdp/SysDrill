@@ -133,7 +133,7 @@ class RecommendationEngineTest(unittest.TestCase):
         )
         self.assertIn("remediate", decision["rationale"].lower())
 
-    def test_next_recommendation_falls_back_to_spaced_review_after_strong_reviewed_outcome(self):
+    def test_next_recommendation_prefers_next_unseen_concept_after_strong_reviewed_outcome(self):
         session = self.runtime.start_manual_session(
             user_id="demo-user",
             mode="Study",
@@ -151,7 +151,81 @@ class RecommendationEngineTest(unittest.TestCase):
         decision = self.engine.next_recommendation(user_id="demo-user")
 
         self.assertEqual(decision["chosen_action"]["mode"], "Study")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "LearnNew")
+        self.assertEqual(
+            decision["chosen_action"]["target_id"],
+            "concept.url-shortener.caching",
+        )
+        self.assertEqual(
+            decision["supporting_signals"],
+            [
+                "no_prior_reviewed_attempt_for_target",
+                "bootstrap_exploration_bias",
+            ],
+        )
+        self.assertIn("no reviewed evidence", decision["rationale"].lower())
+
+    def test_next_recommendation_falls_back_to_spaced_review_when_no_unseen_targets_remain(self):
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.71,
+                            "review_due_risk": 0.2,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.url-shortener.caching": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.68,
+                            "review_due_risk": 0.22,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.url-shortener.id-generation": {
+                            "proficiency_estimate": 0.83,
+                            "confidence": 0.67,
+                            "review_due_risk": 0.24,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.url-shortener.read-scaling": {
+                            "proficiency_estimate": 0.84,
+                            "confidence": 0.66,
+                            "review_due_risk": 0.23,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.url-shortener.storage-choice": {
+                            "proficiency_estimate": 0.85,
+                            "confidence": 0.69,
+                            "review_due_risk": 0.21,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {},
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.0,
+                        "recent_abandonment_signal": 0.0,
+                        "mock_readiness_estimate": 0.1,
+                        "mock_readiness_confidence": 0.1,
+                        "last_active_at": "2026-03-20T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-20T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Study")
         self.assertEqual(decision["chosen_action"]["session_intent"], "SpacedReview")
+        self.assertEqual(decision["chosen_action"]["target_id"], "concept.alpha-topic")
         self.assertEqual(
             decision["supporting_signals"],
             [
@@ -578,7 +652,11 @@ class RecommendationEngineTest(unittest.TestCase):
         decision = engine.next_recommendation(user_id="demo-user")
 
         self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
-        self.assertEqual(decision["chosen_action"]["session_intent"], "SpacedReview")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "LearnNew")
+        self.assertEqual(
+            decision["chosen_action"]["target_id"],
+            "concept.url-shortener.caching",
+        )
 
     def test_next_recommendation_avoids_immediate_repeat_after_reviewed_mock_attempt(self):
         session = self.runtime.start_manual_session(

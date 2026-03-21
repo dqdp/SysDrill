@@ -40,8 +40,9 @@ other devices are not expected to recover this state.
 3. Start the frontend dev server:
    `npm run dev`
 
-The dev server proxies `/content`, `/runtime`, `/recommendations`, and
-`/health` to the local backend on `http://127.0.0.1:8000`.
+The dev server proxies `/content`, `/learner`, `/runtime`,
+`/recommendations`, and `/health` to the local backend on
+`http://127.0.0.1:8000`.
 
 ## Verification
 
