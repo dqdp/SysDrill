@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sysdrill_backend.executable_learning_unit_materializer import supported_materialization_pairs
+from sysdrill_backend.learner_projection import LearnerProjector
 
 _ACTION_PAIR_ORDER = {
     ("Study", "LearnNew"): 0,
@@ -43,8 +44,9 @@ def _action_pattern(action: dict[str, Any]) -> tuple[str, str, str]:
 
 
 class RecommendationEngine:
-    def __init__(self, runtime: Any):
+    def __init__(self, runtime: Any, learner_projector: Any | None = None):
         self._runtime = runtime
+        self._learner_projector = LearnerProjector() if learner_projector is None else learner_projector
         self._decisions: dict[str, dict[str, Any]] = {}
         self._decision_counter = 0
         self._state_lock = threading.RLock()
@@ -55,7 +57,8 @@ class RecommendationEngine:
             if not candidate_records:
                 raise NoRecommendationCandidatesError("no recommendation candidates are available")
 
-            decision_context = self._choose_action(user_id, candidate_records)
+            recommendation_context = self._recommendation_context(user_id, candidate_records)
+            decision_context = self._choose_action(recommendation_context)
             decision_id = self._next_decision_id()
             occurred_at = self._utc_now_iso()
             decision_record = {
@@ -153,12 +156,14 @@ class RecommendationEngine:
 
     def _choose_action(
         self,
-        user_id: str,
-        candidate_records: list[dict[str, Any]],
+        recommendation_context: dict[str, Any],
     ) -> dict[str, Any]:
-        latest_outcomes = {}
-        for outcome in self._runtime.list_user_reviewed_outcomes(user_id):
-            latest_outcomes[outcome["content_id"]] = outcome
+        candidate_records = recommendation_context["candidate_records"]
+        concept_state = recommendation_context["concept_state"]
+        subskill_state = recommendation_context["subskill_state"]
+        latest_outcomes = recommendation_context["latest_outcomes"]
+        recent_patterns = recommendation_context["recent_accepted_patterns"]
+        seen_targets = set(concept_state)
 
         learn_new_targets = {
             record["action"]["target_id"]
@@ -173,13 +178,12 @@ class RecommendationEngine:
             for record in candidate_records
             if not (
                 record["action"]["mode"] == "Practice"
-                and record["action"]["target_id"] not in latest_outcomes
+                and record["action"]["target_id"] not in seen_targets
                 and record["action"]["target_id"] in learn_new_targets
             )
         ]
 
         blocking_signals = []
-        recent_patterns = self._recent_accepted_patterns(user_id)
         if len(recent_patterns) >= 2 and recent_patterns[-1] == recent_patterns[-2]:
             repeated_pattern = recent_patterns[-1]
             anti_loop_filtered = [
@@ -195,7 +199,8 @@ class RecommendationEngine:
             raise NoRecommendationCandidatesError("no recommendation candidates are available")
 
         weak_targets = []
-        middling_targets = []
+        reinforce_targets = []
+        review_due_targets = []
         unseen_targets = sorted(
             {
                 record["action"]["target_id"]
@@ -203,27 +208,39 @@ class RecommendationEngine:
                 if (
                     record["action"]["mode"] == "Study"
                     and record["action"]["session_intent"] == "LearnNew"
-                    and record["action"]["target_id"] not in latest_outcomes
+                    and record["action"]["target_id"] not in seen_targets
                 )
             }
         )
         seen_targets = []
+        supported_subskill_gap = _supported_subskill_gap(subskill_state)
 
         for target_id in sorted({record["action"]["target_id"] for record in filtered_records}):
-            outcome = latest_outcomes.get(target_id)
-            if outcome is None:
+            concept_summary = concept_state.get(target_id)
+            if not isinstance(concept_summary, dict):
                 continue
 
             seen_targets.append(target_id)
-            weighted_score = outcome["weighted_score"]
-            missing_dimension_count = len(outcome["missing_dimensions"])
-            if weighted_score < 0.55 or missing_dimension_count >= 2:
+            if _is_confirmed_weak(concept_summary):
                 weak_targets.append(target_id)
-            elif weighted_score < 0.8 or missing_dimension_count >= 1:
-                middling_targets.append(target_id)
+                continue
+            if _is_review_due_target(concept_summary):
+                review_due_targets.append(target_id)
+                continue
+            if _is_reinforcement_target(
+                concept_summary,
+                latest_outcomes.get(target_id),
+                supported_subskill_gap,
+            ):
+                reinforce_targets.append(target_id)
 
         if weak_targets:
-            target_id = weak_targets[0]
+            target_id = self._first_target_by_priority(
+                targets=weak_targets,
+                concept_state=concept_state,
+                metric="proficiency_estimate",
+                reverse=False,
+            )
             chosen_record = self._first_matching_record(
                 filtered_records,
                 target_id=target_id,
@@ -240,33 +257,73 @@ class RecommendationEngine:
                 blocking_signals=blocking_signals,
                 rationale=(
                     "Choose Practice / Remediate on '{0}' because the latest reviewed "
-                    "outcome is weak and the next step should be bounded remediation."
+                    "learner state shows confirmed weakness and the next step should "
+                    "be bounded remediation."
                 ).format(chosen_record["target_title"]),
                 alternatives_summary=(
                     "Study actions remain available, but bounded remediation is ranked "
-                    "higher than exploration after a weak reviewed attempt."
+                    "higher than exploration after confirmed weak evidence."
                 ),
             )
 
-        if middling_targets:
-            target_id = middling_targets[0]
+        if review_due_targets:
+            target_id = self._first_target_by_priority(
+                targets=review_due_targets,
+                concept_state=concept_state,
+                metric="review_due_risk",
+                reverse=True,
+            )
+            chosen_record = self._first_matching_record(
+                filtered_records,
+                target_id=target_id,
+                mode="Study",
+                session_intent="SpacedReview",
+            )
+            return self._decision_payload(
+                candidate_records=filtered_records,
+                chosen_record=chosen_record,
+                supporting_signals=[
+                    "review_due_risk_is_high",
+                    "maintenance_review_priority",
+                ],
+                blocking_signals=blocking_signals,
+                rationale=(
+                    "Use Study / SpacedReview on '{0}' because learner state shows "
+                    "maintenance review is currently due."
+                ).format(chosen_record["target_title"]),
+                alternatives_summary=(
+                    "Exploration and practice remain available, but due maintenance is "
+                    "currently ranked higher than progression."
+                ),
+            )
+
+        if reinforce_targets:
+            target_id = self._first_target_by_priority(
+                targets=reinforce_targets,
+                concept_state=concept_state,
+                metric="proficiency_estimate",
+                reverse=False,
+            )
             chosen_record = self._first_matching_record(
                 filtered_records,
                 target_id=target_id,
                 mode="Practice",
                 session_intent="Reinforce",
             )
+            supporting_signals = [
+                "partially_stable_reviewed_outcome",
+                "bounded_reinforcement_priority",
+            ]
+            if supported_subskill_gap:
+                supporting_signals[0] = "supported_subskill_gap"
             return self._decision_payload(
                 candidate_records=filtered_records,
                 chosen_record=chosen_record,
-                supporting_signals=[
-                    "partially_stable_reviewed_outcome",
-                    "bounded_reinforcement_priority",
-                ],
+                supporting_signals=supporting_signals,
                 blocking_signals=blocking_signals,
                 rationale=(
-                    "Choose Practice / Reinforce on '{0}' because the latest reviewed "
-                    "outcome is promising but still needs reinforcement."
+                    "Choose Practice / Reinforce on '{0}' because learner state shows "
+                    "the concept is promising but still needs reinforcement."
                 ).format(chosen_record["target_title"]),
                 alternatives_summary=(
                     "Study actions remain available, but the current recommendation "
@@ -328,6 +385,44 @@ class RecommendationEngine:
 
         raise NoRecommendationCandidatesError("no recommendation candidates are available")
 
+    def _recommendation_context(
+        self,
+        user_id: str,
+        candidate_records: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        learner_profile = self._learner_projector.build_profile(self._runtime, user_id)
+        concept_state = learner_profile.get("concept_state", {})
+        if not isinstance(concept_state, dict):
+            concept_state = {}
+        subskill_state = learner_profile.get("subskill_state", {})
+        if not isinstance(subskill_state, dict):
+            subskill_state = {}
+        trajectory_state = learner_profile.get("trajectory_state", {})
+        if not isinstance(trajectory_state, dict):
+            trajectory_state = {}
+
+        latest_outcomes = {}
+        for outcome in self._runtime.list_user_reviewed_outcomes(user_id):
+            latest_outcomes[outcome["content_id"]] = outcome
+
+        review_due_targets = sorted(
+            [
+                target_id
+                for target_id, summary in concept_state.items()
+                if isinstance(summary, dict) and _is_review_due_target(summary)
+            ]
+        )
+        return {
+            "concept_state": concept_state,
+            "subskill_state": subskill_state,
+            "trajectory_state": trajectory_state,
+            "latest_outcomes": latest_outcomes,
+            "review_due_targets": review_due_targets,
+            "candidate_records": candidate_records,
+            "recent_accepted_patterns": self._recent_accepted_patterns(user_id),
+            "policy_version": "bootstrap.recommendation.v1",
+        }
+
     def _decision_payload(
         self,
         candidate_records: list[dict[str, Any]],
@@ -367,6 +462,23 @@ class RecommendationEngine:
             "no recommendation candidates are available for target '{0}'".format(target_id)
         )
 
+    def _first_target_by_priority(
+        self,
+        targets: list[str],
+        concept_state: dict[str, dict[str, Any]],
+        metric: str,
+        reverse: bool,
+    ) -> str:
+        ordered_targets = sorted(
+            targets,
+            key=lambda target_id: (
+                concept_state.get(target_id, {}).get(metric, 0.0),
+                target_id,
+            ),
+            reverse=reverse,
+        )
+        return ordered_targets[0]
+
     def _recent_accepted_patterns(self, user_id: str) -> list[tuple[str, str, str]]:
         accepted_records = [
             decision
@@ -390,3 +502,53 @@ class RecommendationEngine:
 
     def _utc_now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+
+def _is_confirmed_weak(concept_summary: dict[str, Any]) -> bool:
+    proficiency = _metric(concept_summary, "proficiency_estimate")
+    confidence = _metric(concept_summary, "confidence")
+    review_due_risk = _metric(concept_summary, "review_due_risk")
+    return confidence >= 0.25 and (
+        proficiency <= 0.45 or (proficiency <= 0.55 and review_due_risk >= 0.75)
+    )
+
+
+def _is_review_due_target(concept_summary: dict[str, Any]) -> bool:
+    review_due_risk = _metric(concept_summary, "review_due_risk")
+    confidence = _metric(concept_summary, "confidence")
+    return review_due_risk >= 0.55 and confidence >= 0.25
+
+
+def _is_reinforcement_target(
+    concept_summary: dict[str, Any],
+    latest_outcome: dict[str, Any] | None,
+    supported_subskill_gap: bool,
+) -> bool:
+    proficiency = _metric(concept_summary, "proficiency_estimate")
+    confidence = _metric(concept_summary, "confidence")
+    if proficiency >= 0.55 and supported_subskill_gap and confidence >= 0.25:
+        return True
+    if 0.45 <= proficiency < 0.78 and confidence >= 0.25:
+        return True
+    if not isinstance(latest_outcome, dict):
+        return False
+    weighted_score = latest_outcome.get("weighted_score", 0.0)
+    missing_dimension_count = len(latest_outcome.get("missing_dimensions", []))
+    return weighted_score < 0.8 or missing_dimension_count >= 1
+
+
+def _supported_subskill_gap(subskill_state: dict[str, dict[str, Any]]) -> bool:
+    for subskill_id in ("tradeoff_reasoning", "communication_clarity"):
+        summary = subskill_state.get(subskill_id)
+        if not isinstance(summary, dict):
+            continue
+        if _metric(summary, "proficiency_estimate") <= 0.45 and _metric(summary, "confidence") >= 0.25:
+            return True
+    return False
+
+
+def _metric(summary: dict[str, Any], key: str) -> float:
+    value = summary.get(key, 0.0)
+    if not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)

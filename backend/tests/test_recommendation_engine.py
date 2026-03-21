@@ -156,6 +156,66 @@ class RecommendationEngineTest(unittest.TestCase):
         )
         self.assertIn("review", decision["rationale"].lower())
 
+    def test_next_recommendation_prefers_reinforcement_when_projected_subskill_is_still_weak(self):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=_strong_transcript(),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.74,
+                            "confidence": 0.66,
+                            "review_due_risk": 0.22,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.31,
+                            "confidence": 0.62,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "communication_clarity": {
+                            "proficiency_estimate": 0.79,
+                            "confidence": 0.7,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.0,
+                        "recent_abandonment_signal": 0.0,
+                        "mock_readiness_estimate": 0.2,
+                        "mock_readiness_confidence": 0.15,
+                        "last_active_at": "2026-03-20T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-20T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Practice")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "Reinforce")
+        self.assertIn("reinforcement", decision["rationale"].lower())
+        self.assertIn("bounded_reinforcement_priority", decision["supporting_signals"])
+
     def test_next_recommendation_avoids_triple_repeat_of_same_action_pattern(self):
         expanded_catalog = copy.deepcopy(self.catalog)
         beta_topic = copy.deepcopy(expanded_catalog["alpha-topic"])
@@ -209,6 +269,64 @@ class RecommendationEngineTest(unittest.TestCase):
         with self.assertRaisesRegex(RecommendationDecisionNotFoundError, "unknown decision_id"):
             self.engine.get_decision("rec.missing")
 
+    def test_next_recommendation_uses_injected_projector_as_primary_state_input(self):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=_strong_transcript(),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.28,
+                            "confidence": 0.73,
+                            "review_due_risk": 0.78,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-20T11:00:00Z",
+                        },
+                    },
+                    "subskill_state": {},
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.0,
+                        "recent_abandonment_signal": 0.0,
+                        "mock_readiness_estimate": 0.08,
+                        "mock_readiness_confidence": 0.07,
+                        "last_active_at": "2026-03-20T11:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-20T11:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Practice")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "Remediate")
+        self.assertIn("weak", decision["rationale"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StubLearnerProjector:
+    def __init__(self, profile: dict):
+        self._profile = copy.deepcopy(profile)
+
+    def build_profile(self, runtime_reader, user_id: str) -> dict:
+        profile = copy.deepcopy(self._profile)
+        profile["user_id"] = user_id
+        return profile
