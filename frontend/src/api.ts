@@ -83,6 +83,16 @@ export type EvaluateResponse = {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: {
@@ -94,7 +104,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = await readErrorDetail(response);
-    throw new Error(detail);
+    throw new ApiError(response.status, detail);
   }
 
   return (await response.json()) as T;

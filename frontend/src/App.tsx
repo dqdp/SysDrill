@@ -1,6 +1,7 @@
 import { startTransition, useEffect, useState } from "react";
 
 import {
+  ApiError,
   evaluateSession,
   getRuntimeSession,
   getReview,
@@ -454,13 +455,13 @@ export function App() {
 
     setIsStartingSession(true);
     setSessionError("");
-    clearStoredRecommendation();
 
     try {
       const response = await startRecommendedSession(
         recommendation.decision_id,
         recommendation.chosen_action,
       );
+      clearStoredRecommendation();
 
       startTransition(() => {
         setProfileIndex(
@@ -478,6 +479,41 @@ export function App() {
         setIsStartingSession(false);
       });
     } catch (error) {
+      if (isStaleRecommendationStartError(error)) {
+        clearStoredRecommendation();
+        setRecommendation(null);
+        setRecommendationError("");
+        setIsLoadingRecommendation(true);
+
+        try {
+          const freshRecommendation = await getNextRecommendation();
+          writeStoredRecommendation(freshRecommendation);
+
+          startTransition(() => {
+            setRecommendation(freshRecommendation);
+            setRecommendationError(
+              "The saved recommendation is no longer available. Loaded a fresh recommendation.",
+            );
+            setSessionError("");
+            setIsLoadingRecommendation(false);
+            setIsStartingSession(false);
+          });
+          return;
+        } catch (reloadError) {
+          startTransition(() => {
+            setRecommendation(null);
+            setRecommendationError(
+              "The saved recommendation is no longer available, and a fresh recommendation could not be loaded: "
+                + errorMessage(reloadError),
+            );
+            setSessionError("");
+            setIsLoadingRecommendation(false);
+            setIsStartingSession(false);
+          });
+          return;
+        }
+      }
+
       startTransition(() => {
         setSessionError(errorMessage(error));
         setIsStartingSession(false);
@@ -493,7 +529,6 @@ export function App() {
 
     setIsStartingSession(true);
     setSessionError("");
-    clearStoredRecommendation();
 
     try {
       const response = await startManualSession(
@@ -501,6 +536,7 @@ export function App() {
         activeProfile.sessionIntent,
         selectedUnitId,
       );
+      clearStoredRecommendation();
 
       startTransition(() => {
         setSessionId(response.session_id);
@@ -919,7 +955,15 @@ function requiresReviewRecovery(state: string): boolean {
 }
 
 function isMissingSessionError(error: unknown): boolean {
-  return errorMessage(error).includes("unknown session_id");
+  return isNotFoundError(error) || errorMessage(error).includes("unknown session_id");
+}
+
+function isStaleRecommendationStartError(error: unknown): boolean {
+  return isNotFoundError(error);
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 404;
 }
 
 function profileIndexFor(mode: string, sessionIntent: string): number {

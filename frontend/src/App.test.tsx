@@ -676,6 +676,113 @@ describe("App", () => {
     });
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/runtime/manual-launch-options");
   });
+
+  it("recovers from a stale cached recommendation by loading a fresh decision", async () => {
+    setStoredRecommendation(recommendationPayloadData("Stale cached recommendation."));
+    fetchMock
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(errorResponse(404, "unknown decision_id: rec.0001"))
+      .mockResolvedValueOnce(
+        recommendationPayload("Fresh recommendation after stale cached decision."),
+      );
+
+    render(<App />);
+
+    expect(await screen.findByText("Stale cached recommendation.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+
+    expect(
+      await screen.findByText(
+        "The saved recommendation is no longer available. Loaded a fresh recommendation.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Fresh recommendation after stale cached decision."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Your answer" })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(RECOMMENDATION_STORAGE_KEY)).toContain(
+      "Fresh recommendation after stale cached decision.",
+    );
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toContain(
+      "/runtime/sessions/start-from-recommendation",
+    );
+    expect(fetchMock.mock.calls[2]?.[0]).toContain("/recommendations/next");
+  });
+
+  it("smoke-tests reload recovery through review and back to the launcher", async () => {
+    setStoredSessionEnvelope({
+      sessionId: "session.0090",
+      transcript: "Caching reduces latency for repeated reads.",
+      answerSubmitted: false,
+    });
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0090",
+            state: "awaiting_answer",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching after reload.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ state: "evaluation_pending" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0090",
+          state: "review_presented",
+          evaluation_result: {
+            evaluation_id: "evaluation.0090",
+            weighted_score: 0.71,
+            overall_confidence: 0.77,
+            missing_dimensions: ["trade_off_articulation"],
+          },
+          review_report: {
+            strengths: ["Explains the latency benefit clearly."],
+            missed_dimensions: ["Trade-off articulation"],
+            reasoning_gaps: ["Invalidation costs are omitted."],
+            recommended_next_focus: "Call out invalidation and consistency trade-offs.",
+            support_dependence_note: null,
+          },
+        }),
+      )
+      .mockResolvedValueOnce(recommendationPayload("Next step after recovered review."))
+      .mockResolvedValueOnce(manualLaunchOptionsPayload());
+
+    render(<App />);
+
+    const restoredAnswer = (await screen.findByRole("textbox", {
+      name: "Your answer",
+    })) as HTMLTextAreaElement;
+    expect(restoredAnswer.value).toBe("Caching reduces latency for repeated reads.");
+    expect(screen.getByText("Explain caching after reload.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Request review" }));
+
+    expect(await screen.findByText("Weighted score")).toBeInTheDocument();
+    expect(screen.getByText("0.71")).toBeInTheDocument();
+    expect(
+      screen.getByText("Call out invalidation and consistency trade-offs."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to launcher" }));
+
+    expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
+    expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/runtime/sessions/session.0090");
+    expect(fetchMock.mock.calls[1]?.[0]).toContain("/runtime/sessions/session.0090/answer");
+    expect(fetchMock.mock.calls[2]?.[0]).toContain("/runtime/sessions/session.0090/evaluate");
+  });
 });
 
 function jsonResponse(payload: unknown): Response {
