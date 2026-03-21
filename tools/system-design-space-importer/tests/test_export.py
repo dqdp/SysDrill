@@ -7,6 +7,9 @@ from pathlib import Path
 import yaml
 
 from system_design_space_importer.cli import main
+from system_design_space_importer.jsonio import write_json
+from system_design_space_importer.packager import run_export, run_package
+from system_design_space_importer.paths import RunLayout
 
 
 def _load_json(path):
@@ -146,6 +149,166 @@ class ExportMaterializeTest(unittest.TestCase):
 
         export_dir = self.out_dir / "exports" / "system-design-space" / "event-driven-architecture"
         self.assertFalse(export_dir.exists())
+
+    def test_export_preserves_seeded_scenarios_when_present(self):
+        layout = RunLayout(out_dir=self.out_dir, run_id="scenario-export")
+        layout.ensure_base()
+
+        draft = {
+            "draft_id": "semdraft.troubleshooting-example",
+            "source_document_ids": ["troubleshooting-example"],
+            "inferred_topic_slug": "troubleshooting-example",
+            "mapper_version": "0.1.0",
+            "concepts": [
+                {
+                    "id": {
+                        "value": "concept.troubleshooting-example",
+                        "provenance": [],
+                        "review_required": False,
+                    },
+                    "title": {
+                        "value": "Пример Troubleshooting Interview",
+                        "provenance": [],
+                        "review_required": False,
+                    },
+                    "description": {
+                        "value": "Разбор troubleshooting-кейса.",
+                        "provenance": [],
+                        "review_required": False,
+                    },
+                    "why_it_matters": {"value": [], "provenance": [], "review_required": True},
+                    "when_to_use": {"value": [], "provenance": [], "review_required": True},
+                    "tradeoffs": {"value": [], "provenance": [], "review_required": True},
+                    "related_concepts": {"value": [], "provenance": [], "review_required": True},
+                    "prerequisites": {"value": [], "provenance": [], "review_required": True},
+                }
+            ],
+            "patterns": [],
+            "scenarios": [
+                {
+                    "id": {
+                        "value": "scenario.troubleshooting-example",
+                        "provenance": [],
+                        "review_required": False,
+                    },
+                    "title": {
+                        "value": "Пример Troubleshooting Interview",
+                        "provenance": [],
+                        "review_required": False,
+                    },
+                    "prompt": {
+                        "value": (
+                            "Разберите incident со снижением платежей и объясните ход диагностики."
+                        ),
+                        "provenance": [],
+                        "review_required": True,
+                    },
+                    "content_difficulty_baseline": {
+                        "value": "standard",
+                        "provenance": [],
+                        "review_required": True,
+                    },
+                    "expected_focus_areas": {
+                        "value": ["Архитектурный контекст", "Диагностика инцидента"],
+                        "provenance": [],
+                        "review_required": True,
+                    },
+                    "canonical_axes": {
+                        "value": [
+                            "Методология диагностики — системный подход vs хаотичный поиск",
+                            "Формулирование гипотез и их проверка",
+                        ],
+                        "provenance": [],
+                        "review_required": True,
+                    },
+                    "canonical_follow_up_candidates": {
+                        "value": [
+                            "Уточнить архитектуру платёжного потока",
+                            "Разобрать workaround и полноценное исправление",
+                        ],
+                        "provenance": [],
+                        "review_required": True,
+                    },
+                }
+            ],
+            "hint_ladders": [],
+            "unresolved_fragment_ids": [],
+            "warnings": [],
+        }
+        report = {
+            "package_id": "topicpkg.troubleshooting-example",
+            "checked_at": "2026-03-20T00:00:00+00:00",
+            "schema_valid": True,
+            "errors": [],
+            "warnings": [],
+            "low_confidence_paths": ["scenarios[0].prompt"],
+            "missing_required_paths": [],
+        }
+        manifest = {
+            "seed": "file:///tmp/troubleshooting-example.html",
+            "profile": "chapters_only",
+            "fetch_policy": {"allowed_sources": ["file"]},
+            "discovery_policy": {},
+            "robots_policy": {},
+        }
+        source_document = {
+            "document_id": "troubleshooting-example",
+            "source_name": "system-design.space",
+            "source_url": "file:///tmp/troubleshooting-example.html",
+            "fetched_at": "2026-03-20T00:00:00+00:00",
+            "fetch_mode": "file_copy",
+            "http_status": 200,
+            "content_type": "text/html",
+            "source_hash": "sha256:test",
+            "raw_html_path": "runs/scenario-export/documents/troubleshooting-example/raw.html",
+            "normalized_text_path": (
+                "runs/scenario-export/documents/troubleshooting-example/normalized.txt"
+            ),
+            "parser_version": "0.1.0",
+        }
+
+        write_json(layout.manifest_path, manifest)
+        write_json(
+            layout.documents_dir / "troubleshooting-example" / "source_document.json",
+            source_document,
+        )
+        write_json(
+            layout.drafts_dir / "troubleshooting-example" / "semantic-draft.json",
+            draft,
+        )
+        write_json(
+            layout.reports_dir / "troubleshooting-example" / "validation-report.json",
+            report,
+        )
+
+        packages = run_package(layout)
+        self.assertIn("troubleshooting-example", packages)
+
+        exports = run_export(layout)
+        self.assertIn("troubleshooting-example", exports)
+
+        package = _load_yaml(
+            self.out_dir
+            / "exports"
+            / "system-design-space"
+            / "troubleshooting-example"
+            / "topic-package.yaml"
+        )
+        self.assertEqual(
+            package["canonical_content"]["scenarios"][0]["id"]["value"],
+            "scenario.troubleshooting-example",
+        )
+        self.assertEqual(
+            package["canonical_content"]["scenarios"][0]["content_difficulty_baseline"]["value"],
+            "standard",
+        )
+        self.assertEqual(
+            package["canonical_content"]["scenarios"][0]["canonical_axes"]["value"],
+            [
+                "Методология диагностики — системный подход vs хаотичный поиск",
+                "Формулирование гипотез и их проверка",
+            ],
+        )
 
 
 if __name__ == "__main__":

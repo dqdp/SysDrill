@@ -81,19 +81,23 @@
         "tradeoffs": {
           "provenance": [
             {
-              "confidence": 0.55,
+              "confidence": 0.62,
               "document_id": "event-driven-architecture",
-              "extraction_mode": "llm_assisted",
+              "extraction_mode": "rule",
               "fragment_ids": [
-                "frag.event-driven-architecture.summary.001"
+                "frag.event-driven-architecture.section_body.001",
+                "frag.event-driven-architecture.section_body.002"
               ],
               "notes": [
-                "placeholder field requires editorial review"
+                "heuristic extraction requires editorial review"
               ]
             }
           ],
           "review_required": true,
-          "value": []
+          "value": [
+            "Producers and consumers exchange events through a broker or log, which introduces eventual consistency and requires idempotent consumers.",
+            "Teams often introduce asynchronous messaging without explicit event contracts or replay discipline."
+          ]
         },
         "when_to_use": {
           "provenance": [
@@ -127,9 +131,7 @@
             }
           ],
           "review_required": true,
-          "value": [
-            "Event-driven architecture shifts communication toward immutable domain events, asynchronous consumers, and operational discipline around contracts, idempotency, and observability."
-          ]
+          "value": []
         }
       }
     ],

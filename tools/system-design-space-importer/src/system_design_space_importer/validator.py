@@ -1,5 +1,15 @@
 from system_design_space_importer.jsonio import read_json, write_json
-from system_design_space_importer.utils import utc_now_iso
+from system_design_space_importer.utils import strip_whitespace, utc_now_iso
+
+_SCENARIO_REQUIRED_FIELDS = (
+    "id",
+    "title",
+    "prompt",
+    "content_difficulty_baseline",
+    "expected_focus_areas",
+    "canonical_axes",
+    "canonical_follow_up_candidates",
+)
 
 
 def _collect_low_confidence_paths(payload, prefix=""):
@@ -20,9 +30,37 @@ def _collect_low_confidence_paths(payload, prefix=""):
     return paths
 
 
+def _is_missing_draft_field(field_payload):
+    if not isinstance(field_payload, dict) or "value" not in field_payload:
+        return True
+
+    value = field_payload["value"]
+    if isinstance(value, str):
+        return strip_whitespace(value) == ""
+    if isinstance(value, list):
+        normalized = []
+        for item in value:
+            if isinstance(item, str):
+                item = strip_whitespace(item)
+            if item:
+                normalized.append(item)
+        return len(normalized) == 0
+    return value is None
+
+
+def _validate_scenarios(draft, errors, missing_required_paths):
+    for index, scenario in enumerate(draft.get("scenarios", [])):
+        for field in _SCENARIO_REQUIRED_FIELDS:
+            if _is_missing_draft_field(scenario.get(field)):
+                path = "scenarios[{0}].{1}".format(index, field)
+                missing_required_paths.append(path)
+                errors.append("missing required scenario field: {0}".format(path))
+
+
 def validate_semantic_draft(draft):
     errors = []
     warnings = list(draft.get("warnings", []))
+    missing_required_paths = []
 
     required_fields = (
         "draft_id",
@@ -41,7 +79,9 @@ def validate_semantic_draft(draft):
     if not draft.get("hint_ladders"):
         warnings.append("no hint ladders were generated")
 
+    _validate_scenarios(draft, errors, missing_required_paths)
     low_confidence_paths = sorted(set(_collect_low_confidence_paths(draft)))
+    missing_required_paths = sorted(set(missing_required_paths))
 
     return {
         "package_id": "topicpkg.{0}".format(draft.get("inferred_topic_slug", "unknown")),
@@ -50,7 +90,7 @@ def validate_semantic_draft(draft):
         "errors": errors,
         "warnings": warnings,
         "low_confidence_paths": low_confidence_paths,
-        "missing_required_paths": [],
+        "missing_required_paths": missing_required_paths,
     }
 
 
