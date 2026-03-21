@@ -216,6 +216,12 @@ _URL_SHORTENER_ID_MARKERS = [
     "slug",
     "collision",
 ]
+_URL_SHORTENER_ALLOWED_CONCEPT_IDS = {
+    "concept.url-shortener.id-generation",
+    "concept.url-shortener.storage-choice",
+    "concept.url-shortener.read-scaling",
+    "concept.url-shortener.caching",
+}
 
 
 def evaluate_request(request: dict[str, Any]) -> dict[str, Any]:
@@ -313,6 +319,8 @@ def evaluate_url_shortener_readiness(request: dict[str, Any]) -> dict[str, Any]:
     downstream_signals = _url_shortener_downstream_signals(
         request=request,
         criterion_results=criterion_results,
+        follow_up_metrics=follow_up_metrics,
+        combined_metrics=combined_metrics,
         weighted_score=weighted_score,
         overall_confidence=overall_confidence,
         gating_failures=gating_failures,
@@ -787,6 +795,7 @@ def _build_url_shortener_criterion_results(
                     combined_metrics,
                 ),
                 "missing_aspects": missing_aspects,
+                "criterion_confidence": _criterion_confidence(combined_metrics, score_band),
             }
         )
     return criterion_results
@@ -1019,12 +1028,18 @@ def _scenario_weighted_score(
 def _url_shortener_downstream_signals(
     request: dict[str, Any],
     criterion_results: list[dict[str, Any]],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
     weighted_score: float,
     overall_confidence: float,
     gating_failures: list[str],
 ) -> dict[str, Any]:
+    criterion_results_by_id = {
+        criterion["criterion_id"]: criterion for criterion in criterion_results
+    }
     score_by_criterion = {
-        criterion["criterion_id"]: criterion["score_band"] for criterion in criterion_results
+        criterion_id: criterion["score_band"]
+        for criterion_id, criterion in criterion_results_by_id.items()
     }
     hint_usage_summary = request["hint_usage_summary"]
     hint_dependency = 0.0
@@ -1034,6 +1049,14 @@ def _url_shortener_downstream_signals(
         hint_dependency += 0.2
     if request.get("answer_reveal_flag", False):
         hint_dependency += 0.35
+    concept_mock_evidence = _url_shortener_concept_mock_evidence(
+        request=request,
+        criterion_results_by_id=criterion_results_by_id,
+        follow_up_metrics=follow_up_metrics,
+        combined_metrics=combined_metrics,
+        overall_confidence=overall_confidence,
+        gating_failures=gating_failures,
+    )
     return {
         "requirements_gap": round(
             max(0.0, (3 - score_by_criterion["requirements_understanding"]) / 3.0),
@@ -1056,6 +1079,7 @@ def _url_shortener_downstream_signals(
             4,
         ),
         "hint_dependency": round(min(1.0, hint_dependency), 4),
+        "concept_mock_evidence": concept_mock_evidence,
         "bounded_mock_pass": bool(
             weighted_score >= 0.65
             and overall_confidence >= 0.65
@@ -1115,6 +1139,146 @@ def _url_shortener_review_summary(
         "support_dependence_note": support_dependence_note,
         "follow_up_handling_note": follow_up_handling_note,
     }
+
+
+def _url_shortener_concept_mock_evidence(
+    request: dict[str, Any],
+    criterion_results_by_id: dict[str, dict[str, Any]],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+    overall_confidence: float,
+    gating_failures: list[str],
+) -> list[dict[str, Any]]:
+    allowed_concept_ids = _allowed_mock_concept_ids(request)
+    concept_signals: list[dict[str, Any]] = []
+    combined_text = combined_metrics["normalized_text"]
+    follow_up_text = follow_up_metrics["normalized_text"]
+
+    missing_identifier_strategy = not _contains_any(follow_up_text, _URL_SHORTENER_ID_MARKERS)
+    missing_storage_choice = not _contains_any(combined_text, _URL_SHORTENER_STORAGE_MARKERS)
+    missing_scaling_anchor = not _contains_any(
+        combined_text,
+        ["replica", "replication", "shard", "scale", "throughput"],
+    )
+    cache_expected = _contains_any(combined_text, ["read-heavy", "redirect"])
+    missing_cache = cache_expected and not _contains_any(combined_text, ["cache", "caching"])
+
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.url-shortener.id-generation",
+        signal_strength=0.72,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["data_and_storage_choices"],
+            overall_confidence,
+        ),
+        source_criteria=["data_and_storage_choices"],
+        evidence_basis=["expected_cue_missing"],
+        condition=missing_identifier_strategy,
+    )
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.url-shortener.storage-choice",
+        signal_strength=0.82 if gating_failures else 0.7,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["data_and_storage_choices"],
+            overall_confidence,
+        ),
+        source_criteria=["data_and_storage_choices"],
+        evidence_basis=["gating_failure"] if gating_failures else ["explicit_gap"],
+        condition=missing_storage_choice,
+    )
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.url-shortener.read-scaling",
+        signal_strength=0.74 if gating_failures else 0.66,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["scaling_strategy"],
+            overall_confidence,
+        ),
+        source_criteria=["scaling_strategy"],
+        evidence_basis=["gating_failure"] if gating_failures else ["expected_cue_missing"],
+        condition=missing_scaling_anchor,
+    )
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.url-shortener.caching",
+        signal_strength=0.56,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["scaling_strategy"],
+            overall_confidence,
+        ),
+        source_criteria=["scaling_strategy"],
+        evidence_basis=["expected_cue_missing"],
+        condition=missing_cache,
+    )
+    return concept_signals
+
+
+def _allowed_mock_concept_ids(request: dict[str, Any]) -> set[str]:
+    bound_concept_ids = request.get("bound_concept_ids")
+    if not isinstance(bound_concept_ids, list) or not bound_concept_ids:
+        return set(_URL_SHORTENER_ALLOWED_CONCEPT_IDS)
+    allowed = {
+        concept_id
+        for concept_id in bound_concept_ids
+        if isinstance(concept_id, str) and concept_id in _URL_SHORTENER_ALLOWED_CONCEPT_IDS
+    }
+    return allowed if allowed else set(_URL_SHORTENER_ALLOWED_CONCEPT_IDS)
+
+
+def _concept_signal_confidence(
+    criterion_results_by_id: dict[str, dict[str, Any]],
+    source_criteria: list[str],
+    overall_confidence: float,
+) -> float:
+    criterion_confidences = [
+        float(criterion_results_by_id[criterion_id].get("criterion_confidence", overall_confidence))
+        for criterion_id in source_criteria
+        if isinstance(criterion_results_by_id.get(criterion_id), dict)
+    ]
+    if criterion_confidences:
+        average_confidence = sum(criterion_confidences) / len(criterion_confidences)
+        return round(
+            max(
+                0.1,
+                min(1.0, min(overall_confidence, average_confidence)),
+            ),
+            2,
+        )
+    return round(max(0.1, min(1.0, overall_confidence)), 2)
+
+
+def _append_negative_mock_concept_signal(
+    concept_signals: list[dict[str, Any]],
+    allowed_concept_ids: set[str],
+    concept_id: str,
+    signal_strength: float,
+    signal_confidence: float,
+    source_criteria: list[str],
+    evidence_basis: list[str],
+    condition: bool,
+) -> None:
+    if not condition or concept_id not in allowed_concept_ids:
+        return
+    concept_signals.append(
+        {
+            "signal_type": "concept_mock_evidence",
+            "concept_id": concept_id,
+            "direction": "negative",
+            "signal_strength": round(max(0.0, min(1.0, signal_strength)), 2),
+            "signal_confidence": round(max(0.0, min(1.0, signal_confidence)), 2),
+            "source_criteria": list(source_criteria),
+            "evidence_basis": list(evidence_basis),
+        }
+    )
 
 
 def _strength_line(criterion_id: str) -> str:

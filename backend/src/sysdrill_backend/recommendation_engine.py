@@ -377,6 +377,39 @@ class RecommendationEngine:
                 ),
             )
 
+        recent_mock_reinforce_target = None
+        if recent_mock_feedback is not None:
+            recent_mock_reinforce_target = self._recent_mock_reinforce_target(
+                concept_state=concept_state,
+                trajectory_state=trajectory_state,
+                scenario_bound_concept_ids=scenario_bound_concept_ids,
+            )
+        if recent_mock_reinforce_target is not None:
+            chosen_record = self._first_matching_record(
+                filtered_records,
+                target_id=recent_mock_reinforce_target,
+                mode="Study",
+                session_intent="Reinforce",
+            )
+            return self._decision_payload(
+                candidate_records=filtered_records,
+                chosen_record=chosen_record,
+                supporting_signals=[
+                    "recent_mock_concept_fragility",
+                    "bounded_reinforcement_fallback",
+                ],
+                blocking_signals=blocking_signals,
+                rationale=(
+                    "Use Study / Reinforce on '{0}' because the latest mock exposed "
+                    "concept-specific weakness but the current confidence and "
+                    "completion-likelihood envelope still favor a lower-pressure pass."
+                ).format(chosen_record["target_title"]),
+                alternatives_summary=(
+                    "Practice / Remediate remains a nearby option, but the current "
+                    "policy envelope keeps the next step more supportive first."
+                ),
+            )
+
         if review_due_targets:
             target_id = self._first_target_by_priority(
                 targets=review_due_targets,
@@ -715,6 +748,37 @@ class RecommendationEngine:
         if latest_mock_state == "abandoned":
             return {"signal": "recent_mock_abandonment"}
         return {"signal": "recent_mock_attempt"}
+
+    def _recent_mock_reinforce_target(
+        self,
+        concept_state: dict[str, dict[str, Any]],
+        trajectory_state: dict[str, Any],
+        scenario_bound_concept_ids: set[str],
+    ) -> str | None:
+        harsh_envelope = (
+            _metric(trajectory_state, "recent_fatigue_signal") >= 0.08
+            or _metric(trajectory_state, "recent_abandonment_signal") >= 0.08
+        )
+        candidate_targets = []
+        for target_id in sorted(scenario_bound_concept_ids):
+            summary = concept_state.get(target_id)
+            if not isinstance(summary, dict):
+                continue
+            proficiency = _metric(summary, "proficiency_estimate")
+            confidence = _metric(summary, "confidence")
+            if proficiency > 0.55:
+                continue
+            if confidence >= 0.25 and not harsh_envelope:
+                continue
+            candidate_targets.append(target_id)
+        if not candidate_targets:
+            return None
+        return self._first_target_by_priority(
+            targets=candidate_targets,
+            concept_state=concept_state,
+            metric="proficiency_estimate",
+            reverse=False,
+        )
 
     def _next_decision_id(self) -> str:
         self._decision_counter += 1

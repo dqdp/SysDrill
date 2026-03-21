@@ -643,6 +643,164 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             0.0,
         )
 
+    def test_mock_concept_signals_update_only_explicitly_signaled_concepts(self):
+        mock_result = url_shortener_evaluation_result(
+            session_id="session.0037a",
+            weighted_score=0.58,
+            overall_confidence=0.74,
+            requirements_band=2,
+            decomposition_band=2,
+            storage_band=1,
+            scaling_band=2,
+            reliability_band=2,
+            tradeoff_band=2,
+            communication_band=2,
+            hint_dependency=0.0,
+        )
+        mock_result["downstream_signals"]["concept_mock_evidence"] = [
+            concept_mock_signal(
+                concept_id="concept.url-shortener.storage-choice",
+                signal_strength=0.72,
+                signal_confidence=0.76,
+                source_criteria=["data_and_storage_choices"],
+                evidence_basis=["explicit_gap"],
+            )
+        ]
+        mock_session = reviewed_mock_session(
+            session_id="session.0037a",
+            scenario_id="scenario.url-shortener.basic",
+            bound_concept_ids=[
+                "concept.url-shortener.storage-choice",
+                "concept.url-shortener.id-generation",
+            ],
+            event_ids=["event.0037a"],
+            evaluation_result=mock_result,
+        )
+
+        profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [mock_session],
+                {
+                    "session.0037a": session_events(
+                        session_id="session.0037a",
+                        content_id="scenario.url-shortener.basic",
+                        occurred_at_values=["2026-03-20T13:00:00Z"],
+                        event_types=["evaluation_attached"],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+
+        self.assertIn(
+            "concept.url-shortener.storage-choice",
+            profile["concept_state"],
+        )
+        self.assertNotIn(
+            "concept.url-shortener.id-generation",
+            profile["concept_state"],
+        )
+
+    def test_mock_concept_signal_weight_respects_signal_confidence(self):
+        low_confidence_result = url_shortener_evaluation_result(
+            session_id="session.0037b",
+            weighted_score=0.58,
+            overall_confidence=0.74,
+            requirements_band=2,
+            decomposition_band=2,
+            storage_band=1,
+            scaling_band=2,
+            reliability_band=2,
+            tradeoff_band=2,
+            communication_band=2,
+            hint_dependency=0.0,
+        )
+        low_confidence_result["downstream_signals"]["concept_mock_evidence"] = [
+            concept_mock_signal(
+                concept_id="concept.url-shortener.storage-choice",
+                signal_strength=0.8,
+                signal_confidence=0.25,
+                source_criteria=["data_and_storage_choices"],
+                evidence_basis=["explicit_gap"],
+            )
+        ]
+        high_confidence_result = url_shortener_evaluation_result(
+            session_id="session.0037c",
+            weighted_score=0.58,
+            overall_confidence=0.74,
+            requirements_band=2,
+            decomposition_band=2,
+            storage_band=1,
+            scaling_band=2,
+            reliability_band=2,
+            tradeoff_band=2,
+            communication_band=2,
+            hint_dependency=0.0,
+        )
+        high_confidence_result["downstream_signals"]["concept_mock_evidence"] = [
+            concept_mock_signal(
+                concept_id="concept.url-shortener.storage-choice",
+                signal_strength=0.8,
+                signal_confidence=0.8,
+                source_criteria=["data_and_storage_choices"],
+                evidence_basis=["explicit_gap"],
+            )
+        ]
+
+        low_confidence_profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [
+                    reviewed_mock_session(
+                        session_id="session.0037b",
+                        scenario_id="scenario.url-shortener.basic",
+                        bound_concept_ids=["concept.url-shortener.storage-choice"],
+                        event_ids=["event.0037b"],
+                        evaluation_result=low_confidence_result,
+                    )
+                ],
+                {
+                    "session.0037b": session_events(
+                        session_id="session.0037b",
+                        content_id="scenario.url-shortener.basic",
+                        occurred_at_values=["2026-03-20T13:05:00Z"],
+                        event_types=["evaluation_attached"],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+        high_confidence_profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [
+                    reviewed_mock_session(
+                        session_id="session.0037c",
+                        scenario_id="scenario.url-shortener.basic",
+                        bound_concept_ids=["concept.url-shortener.storage-choice"],
+                        event_ids=["event.0037c"],
+                        evaluation_result=high_confidence_result,
+                    )
+                ],
+                {
+                    "session.0037c": session_events(
+                        session_id="session.0037c",
+                        content_id="scenario.url-shortener.basic",
+                        occurred_at_values=["2026-03-20T13:10:00Z"],
+                        event_types=["evaluation_attached"],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+
+        self.assertLess(
+            high_confidence_profile["concept_state"]["concept.url-shortener.storage-choice"][
+                "proficiency_estimate"
+            ],
+            low_confidence_profile["concept_state"]["concept.url-shortener.storage-choice"][
+                "proficiency_estimate"
+            ],
+        )
+
     def test_mock_readiness_remains_conservative_without_mock_or_follow_up_evidence(self):
         profile = self.projector.build_profile(
             StubRuntimeReader(
@@ -831,7 +989,7 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
         self.assertGreater(concept["hint_dependency_signal"], 0.0)
         self.assertGreater(concept["review_due_risk"], 0.0)
 
-    def test_projector_keeps_reviewed_mock_history_out_of_concept_state(self):
+    def test_projector_updates_concept_state_from_explicit_mock_signals(self):
         runtime = SessionRuntime(self.catalog)
         projector = LearnerProjector()
         session = runtime.start_manual_session(
@@ -862,7 +1020,8 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
 
         profile = projector.build_profile(runtime, user_id="user-1")
 
-        self.assertEqual(profile["concept_state"], {})
+        self.assertIn("concept.url-shortener.read-scaling", profile["concept_state"])
+        self.assertNotIn("scenario.url-shortener.basic", profile["concept_state"])
         self.assertIn("tradeoff_reasoning", profile["subskill_state"])
         self.assertIn("communication_clarity", profile["subskill_state"])
         self.assertGreater(profile["trajectory_state"]["mock_readiness_estimate"], 0.0)
@@ -1089,6 +1248,24 @@ def criterion_result(
         "missing_aspects": [],
         "inferred_judgment": "",
         "criterion_confidence": criterion_confidence,
+    }
+
+
+def concept_mock_signal(
+    concept_id: str,
+    signal_strength: float,
+    signal_confidence: float,
+    source_criteria: list[str],
+    evidence_basis: list[str],
+) -> dict[str, Any]:
+    return {
+        "signal_type": "concept_mock_evidence",
+        "concept_id": concept_id,
+        "direction": "negative",
+        "signal_strength": signal_strength,
+        "signal_confidence": signal_confidence,
+        "source_criteria": list(source_criteria),
+        "evidence_basis": list(evidence_basis),
     }
 
 

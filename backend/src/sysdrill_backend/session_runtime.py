@@ -874,6 +874,9 @@ class SessionRuntime:
         if evaluation_request["unit_family"] == "scenario_readiness_check":
             evaluation_request["scenario_family"] = session["current_unit"]["scenario_family"]
             evaluation_request["follow_up_transcript_text"] = follow_up_transcript_text
+            bound_concept_ids = session["current_unit"].get("bound_concept_ids")
+            if isinstance(bound_concept_ids, list) and bound_concept_ids:
+                evaluation_request["bound_concept_ids"] = list(bound_concept_ids)
         return evaluation_request
 
     def _next_session_id(self) -> str:

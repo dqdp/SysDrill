@@ -4,6 +4,7 @@ import unittest
 from sysdrill_backend.rule_first_evaluator import (
     RuleFirstEvaluationError,
     evaluate_concept_recall,
+    evaluate_url_shortener_readiness,
 )
 
 
@@ -32,6 +33,38 @@ class RuleFirstEvaluatorTest(unittest.TestCase):
             },
             "completion_status": "submitted",
             "strictness_profile": "supportive",
+        }
+        self.url_shortener_request = {
+            "session_id": "session.1001",
+            "session_mode": "MockInterview",
+            "session_intent": "ReadinessCheck",
+            "executable_unit_id": (
+                "elu.scenario_readiness_check.mock_interview.readiness_check."
+                "scenario.url-shortener.basic"
+            ),
+            "unit_family": "scenario_readiness_check",
+            "scenario_family": "url_shortener",
+            "binding_id": "binding.url_shortener.v1",
+            "transcript_text": (
+                "The service is read-heavy and latency sensitive. I would run a "
+                "redirect service with a key-value database mapping each short URL "
+                "to the long URL. Reads can use caching and replicas, and the "
+                "trade-off is more invalidation work."
+            ),
+            "follow_up_transcript_text": (
+                "I would keep the read path fast with replicas and a key-value "
+                "lookup, but I have not defended how links are minted yet."
+            ),
+            "hint_usage_summary": {
+                "hint_count": 0,
+                "used_prior_hints": False,
+            },
+            "answer_reveal_flag": False,
+            "timing_summary": {
+                "response_latency_ms": 62000,
+            },
+            "completion_status": "submitted",
+            "strictness_profile": "strict",
         }
 
     def test_empty_transcript_yields_low_confidence_and_missing_dimensions(self):
@@ -120,6 +153,68 @@ class RuleFirstEvaluatorTest(unittest.TestCase):
 
         with self.assertRaisesRegex(RuleFirstEvaluationError, "binding"):
             evaluate_concept_recall(request)
+
+    def test_url_shortener_emits_negative_id_generation_signal_without_smearing(self):
+        request = copy.deepcopy(self.url_shortener_request)
+        request["bound_concept_ids"] = [
+            "concept.url-shortener.id-generation",
+            "concept.url-shortener.storage-choice",
+            "concept.url-shortener.read-scaling",
+            "concept.url-shortener.caching",
+        ]
+
+        result = evaluate_url_shortener_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertEqual(
+            [
+                signal["concept_id"]
+                for signal in concept_signals
+                if signal["direction"] == "negative"
+            ],
+            ["concept.url-shortener.id-generation"],
+        )
+        self.assertEqual(
+            concept_signals[0]["evidence_basis"],
+            ["expected_cue_missing"],
+        )
+        self.assertEqual(
+            concept_signals[0]["source_criteria"],
+            ["data_and_storage_choices"],
+        )
+
+    def test_url_shortener_concept_signals_respect_bound_concept_ids(self):
+        request = copy.deepcopy(self.url_shortener_request)
+        request["transcript_text"] = (
+            "The service is read-heavy and latency sensitive. I would run a "
+            "redirect service and use caching with replicas on the read path. "
+            "The trade-off is more operational complexity."
+        )
+        request["follow_up_transcript_text"] = (
+            "I would keep replicas for throughput and keep availability high."
+        )
+        request["bound_concept_ids"] = ["concept.url-shortener.storage-choice"]
+
+        result = evaluate_url_shortener_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertEqual(
+            [signal["concept_id"] for signal in concept_signals],
+            ["concept.url-shortener.storage-choice"],
+        )
+        self.assertTrue(all(signal["direction"] == "negative" for signal in concept_signals))
+
+    def test_url_shortener_does_not_emit_positive_concept_signal_from_vague_success(self):
+        request = copy.deepcopy(self.url_shortener_request)
+        request["follow_up_transcript_text"] = (
+            "I would use a counter and collision checks, and I would keep the "
+            "read path fast with replicas and a cache-backed lookup."
+        )
+
+        result = evaluate_url_shortener_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertFalse(any(signal["direction"] == "positive" for signal in concept_signals))
 
 
 if __name__ == "__main__":

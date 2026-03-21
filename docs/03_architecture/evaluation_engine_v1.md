@@ -213,6 +213,39 @@ Examples:
 
 These signals are inputs to learner-state projection, not direct state mutations.
 
+### Concept-specific mock downstream signals
+For scenario-backed mock units, evaluation may emit explicit concept-specific
+downstream signals when the scenario-family binding defines them.
+
+Required shape:
+- `signal_type` (`concept_mock_evidence`)
+- `concept_id`
+- `direction` (`positive` or `negative`)
+- `signal_strength` in `[0.0, 1.0]`
+- `signal_confidence` in `[0.0, 1.0]`
+- `source_criteria[]`
+- `evidence_basis[]`
+
+Recommended bounded `evidence_basis[]` labels:
+- `explicit_coverage`
+- `explicit_gap`
+- `gating_failure`
+- `expected_cue_present`
+- `expected_cue_missing`
+
+Rules:
+- mapping from scenario evidence to concept-specific signals is owned by the
+  scenario-family binding, not by `learner_projection`
+- emitted `concept_id` must remain within the scenario's allowed concept set;
+  when `bound_concept_ids` exists, concept signals must be a subset of it
+- negative signals may be emitted from explicit gaps, gating failures, or
+  explicit expected-cue absence
+- positive signals require explicit observed evidence for that concept and must
+  remain conservative from a single attempt
+- absence of a concept-specific signal means no concept update for that concept
+- prose review summary may explain the result, but may not replace the
+  normalized downstream signal contract
+
 ## Mode handling
 
 ### Study

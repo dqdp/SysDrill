@@ -189,6 +189,42 @@ class LearnerSummaryRuleTest(unittest.TestCase):
         )
         self.assertNotIn("scenario.url-shortener.basic", str(summary))
 
+    def test_mock_weak_concept_can_surface_without_becoming_review_due(self):
+        export_root = Path(__file__).parent / "fixtures" / "export_root"
+        catalog = load_topic_catalog(export_root, allow_draft_bundles=True)
+        title_map = build_content_title_map(catalog)
+
+        summary = build_learner_summary(
+            {
+                "user_id": "user-1",
+                "concept_state": {
+                    "concept.url-shortener.storage-choice": {
+                        "proficiency_estimate": 0.4,
+                        "confidence": 0.38,
+                        "review_due_risk": 0.42,
+                        "hint_dependency_signal": 0.12,
+                        "last_evidence_at": "2026-03-21T10:00:00Z",
+                    }
+                },
+                "subskill_state": {},
+                "trajectory_state": {
+                    "recent_fatigue_signal": 0.0,
+                    "recent_abandonment_signal": 0.0,
+                    "mock_readiness_estimate": 0.18,
+                    "mock_readiness_confidence": 0.16,
+                    "last_active_at": "2026-03-21T10:00:00Z",
+                },
+                "last_updated_at": "2026-03-21T10:00:00Z",
+            },
+            content_titles=title_map,
+        )
+
+        self.assertEqual(
+            summary["weak_areas"][0]["target_id"],
+            "concept.url-shortener.storage-choice",
+        )
+        self.assertEqual(summary["review_due"], [])
+
 
 class LearnerSummaryApiTest(unittest.TestCase):
     def setUp(self):

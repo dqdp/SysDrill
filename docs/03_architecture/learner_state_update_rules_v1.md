@@ -87,6 +87,7 @@ It should carry or reference:
 - rubric subscores;
 - target concepts;
 - target subskills;
+- downstream learner-model signals;
 - evaluation confidence;
 - missing dimensions and weaknesses;
 - overall outcome band.
@@ -138,7 +139,17 @@ Weight modifiers:
 - lower weight when many hints were used;
 - lower weight when `answer_revealed` occurred;
 - higher weight in `Practice` and `Mock Interview` for applied subskills;
+- concept-specific positive updates from a single mock attempt should remain
+  conservative even when the overall result is decent;
 - lower confidence when transcript is partial or session ended unresolved.
+
+Interpretation rules:
+- for scenario-backed mock units, concept-level updates should come from
+  explicit concept-specific downstream signals emitted by evaluation, not from
+  family-level score or `bound_concept_ids` alone;
+- absence of a concept-specific signal means no concept update for that concept;
+- negative concept evidence may be easier to emit than strong positive concept
+  evidence when the transcript is partial or ambiguous.
 
 ### `hint_requested`
 Effects:
@@ -253,6 +264,7 @@ Do not:
 - infer strong weakness from a single bad event;
 - treat hint use as hard failure;
 - rely on low-level UI exhaust for learner-state updates;
+- smear one scenario-family outcome across every bound concept;
 - build per-card-type or per-scenario state maps in v1.
 
 ## Summary rules
@@ -264,3 +276,5 @@ Do not:
 5. `session_abandoned` updates fatigue/abandonment more than knowledge.
 6. Mode weighting is required.
 7. Confidence grows from repeated completed evidence, not a single strong performance.
+8. Scenario-backed mock concept updates require explicit evaluator-emitted
+   concept signals; `bound_concept_ids` alone is not learner evidence.

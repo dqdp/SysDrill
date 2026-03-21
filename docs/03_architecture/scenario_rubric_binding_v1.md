@@ -27,6 +27,16 @@ Note:
 - `gating_conditions`
 - `mode_adjustments`
 - `expected_evidence_cues`
+- optional `concept_signal_rules`
+
+When present, `concept_signal_rules` define how a scenario-family binding may
+emit concept-specific downstream learner signals.
+
+Rules:
+- these rules remain family-specific and evaluation-owned
+- they do not replace `bound_concept_ids`; they interpret evidence only within
+  the allowed concept set
+- they should stay deterministic and auditable
 
 ## Shared aggregation rules
 
@@ -106,6 +116,41 @@ Hard failure if answer misses all of the following:
 - cache placement;
 - storage/index choice;
 - short id generation discussion.
+
+### Concept signal rules
+
+Allowed concept ids for concept-specific downstream signals:
+- `concept.url-shortener.id-generation`
+- `concept.url-shortener.storage-choice`
+- `concept.url-shortener.read-scaling`
+- `concept.url-shortener.caching`
+
+Shared rules:
+- evaluator may emit `concept_mock_evidence` only for allowed concept ids and
+  only when the scenario's `bound_concept_ids` includes them
+- negative signals may be emitted from explicit gaps, relevant gating failure,
+  or explicit expected-cue absence
+- positive signals require explicit observed evidence and should remain
+  conservative from a single attempt
+- overall scenario success or failure must not be smeared across all allowed
+  concepts
+
+Concept mapping:
+- `id generation or collision avoidance`
+  -> `concept.url-shortener.id-generation`
+- `storage choice for short id -> long URL`
+  -> `concept.url-shortener.storage-choice`
+- `redirect/read path scaling`
+  -> `concept.url-shortener.read-scaling`
+- `cache placement`
+  -> `concept.url-shortener.caching`
+
+Conservative interpretation notes:
+- `concept.url-shortener.caching` should only move when cache placement is
+  explicitly covered or explicitly identified as a missing expected cue; it
+  should not move from generic URL-shortener weakness alone
+- one reviewed mock attempt may at most provide moderate positive evidence for
+  a bound concept; it should not establish high-confidence mastery by itself
 
 ## 2. Rate Limiter
 

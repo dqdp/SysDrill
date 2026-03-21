@@ -57,6 +57,12 @@ class LearnerProjector:
                             evidence_at=reviewed_evidence_at,
                         )
                     )
+                for concept_id, evidence_point in _mock_concept_evidence_points(
+                    session=session,
+                    evaluation_result=evaluation_result,
+                    evidence_at=reviewed_evidence_at,
+                ).items():
+                    concept_evidence[concept_id].append(evidence_point)
 
             for subskill_id, evidence_point in _subskill_evidence_points(
                 session=session,
@@ -272,6 +278,72 @@ def _subskill_evidence_points(
             ),
             "criterion_confidence": _clamp(
                 float(criterion_result.get("criterion_confidence", 0.0))
+            ),
+            "hint_dependency": hint_dependency,
+            "evidence_at": evidence_at,
+        }
+
+    return evidence_points
+
+
+def _mock_concept_evidence_points(
+    session: dict[str, Any],
+    evaluation_result: dict[str, Any],
+    evidence_at: str | None,
+) -> dict[str, dict[str, Any]]:
+    if evidence_at is None:
+        return {}
+    current_unit = session.get("current_unit")
+    if not isinstance(current_unit, dict):
+        return {}
+    if current_unit.get("unit_family") != "scenario_readiness_check":
+        return {}
+
+    downstream_signals = evaluation_result.get("downstream_signals", {})
+    if not isinstance(downstream_signals, dict):
+        return {}
+    concept_signals = downstream_signals.get("concept_mock_evidence", [])
+    if not isinstance(concept_signals, list):
+        return {}
+
+    allowed_concept_ids = {
+        concept_id
+        for concept_id in current_unit.get("bound_concept_ids", [])
+        if isinstance(concept_id, str) and concept_id
+    }
+    if not allowed_concept_ids:
+        return {}
+
+    hint_dependency = _hint_dependency(evaluation_result)
+    mode = session.get("mode")
+    mode_weight = 0.8 if mode == "MockInterview" else 0.9 if mode == "Practice" else 0.75
+    independence_weight = _clamp(1.0 - 0.35 * hint_dependency)
+    evidence_points: dict[str, dict[str, Any]] = {}
+
+    for signal in concept_signals:
+        if not isinstance(signal, dict):
+            continue
+        if signal.get("signal_type") != "concept_mock_evidence":
+            continue
+        if signal.get("direction") != "negative":
+            continue
+        concept_id = signal.get("concept_id")
+        if not isinstance(concept_id, str) or concept_id not in allowed_concept_ids:
+            continue
+        signal_strength = signal.get("signal_strength", 0.0)
+        signal_confidence = signal.get("signal_confidence", 0.0)
+        if not isinstance(signal_strength, (int, float)) or not isinstance(
+            signal_confidence, (int, float)
+        ):
+            continue
+        effective_weight = _clamp(
+            float(signal_strength) * float(signal_confidence) * mode_weight * independence_weight
+        )
+        evidence_points[concept_id] = {
+            "weight": _clamp(max(0.25, effective_weight)),
+            "proficiency_signal": _clamp(0.72 - 0.7 * effective_weight),
+            "overall_confidence": _clamp(
+                float(evaluation_result.get("overall_confidence", 0.0)) * float(signal_confidence)
             ),
             "hint_dependency": hint_dependency,
             "evidence_at": evidence_at,

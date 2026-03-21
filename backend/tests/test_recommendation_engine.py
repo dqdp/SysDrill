@@ -929,6 +929,72 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
         self.assertIn("recent_mock_abandonment", decision["blocking_signals"])
 
+    def test_next_recommendation_falls_back_to_study_reinforce_for_low_confidence_mock_weakness(
+        self,
+    ):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript="I would use a database and some replicas on the read path.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript="I have not defended the storage choice in detail yet.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.url-shortener.storage-choice": {
+                            "proficiency_estimate": 0.49,
+                            "confidence": 0.18,
+                            "review_due_risk": 0.41,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.43,
+                            "confidence": 0.33,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.08,
+                        "recent_abandonment_signal": 0.05,
+                        "mock_readiness_estimate": 0.18,
+                        "mock_readiness_confidence": 0.16,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Study")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "Reinforce")
+        self.assertEqual(
+            decision["chosen_action"]["target_id"],
+            "concept.url-shortener.storage-choice",
+        )
+        self.assertIn("recent_mock_attempt", decision["blocking_signals"])
+
 
 if __name__ == "__main__":
     unittest.main()

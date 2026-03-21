@@ -438,6 +438,15 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         self.assertEqual(result["evaluation_request"]["binding_id"], "binding.url_shortener.v1")
         self.assertEqual(result["evaluation_request"]["unit_family"], "scenario_readiness_check")
         self.assertEqual(result["evaluation_request"]["scenario_family"], "url_shortener")
+        self.assertEqual(
+            result["evaluation_request"]["bound_concept_ids"],
+            [
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.storage-choice",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.caching",
+            ],
+        )
         self.assertIn(
             "I would start with a redirect API",
             result["evaluation_request"]["transcript_text"],
