@@ -27,6 +27,7 @@ class LearnerProjector:
             session_latest_at = _latest_timestamp(
                 [event.get("occurred_at") for event in session_events]
             )
+            reviewed_evidence_at = _reviewed_evidence_timestamp(session_events)
             latest_activity_at = _later_timestamp(latest_activity_at, session_latest_at)
             event_types = {
                 event.get("event_type")
@@ -47,20 +48,20 @@ class LearnerProjector:
                 practice_or_mock_review_count += 1
 
             concept_target_ids = _session_concept_targets(session)
-            if session_latest_at is not None:
+            if reviewed_evidence_at is not None:
                 for content_id in concept_target_ids:
                     concept_evidence[content_id].append(
                         _concept_evidence_point(
                             session=session,
                             evaluation_result=evaluation_result,
-                            evidence_at=session_latest_at,
+                            evidence_at=reviewed_evidence_at,
                         )
                     )
 
             for subskill_id, evidence_point in _subskill_evidence_points(
                 session=session,
                 evaluation_result=evaluation_result,
-                evidence_at=session_latest_at,
+                evidence_at=reviewed_evidence_at,
             ).items():
                 subskill_evidence[subskill_id].append(evidence_point)
 
@@ -355,6 +356,29 @@ def _session_concept_targets(session: dict[str, Any]) -> list[str]:
     if not isinstance(content_id, str) or not content_id:
         return []
     return [content_id]
+
+
+def _reviewed_evidence_timestamp(session_events: list[dict[str, Any]]) -> str | None:
+    # Prefer semantic interpretation boundaries over later lifecycle closure.
+    evaluation_at = _latest_event_timestamp(session_events, {"evaluation_attached"})
+    if evaluation_at is not None:
+        return evaluation_at
+    review_at = _latest_event_timestamp(session_events, {"review_presented"})
+    if review_at is not None:
+        return review_at
+    return _latest_event_timestamp(session_events, None)
+
+
+def _latest_event_timestamp(
+    session_events: list[dict[str, Any]],
+    event_types: set[str] | None,
+) -> str | None:
+    return _latest_timestamp(
+        event.get("occurred_at")
+        for event in session_events
+        if isinstance(event, dict)
+        and (event_types is None or event.get("event_type") in event_types)
+    )
 
 
 def _latest_timestamp(values: Any) -> str | None:

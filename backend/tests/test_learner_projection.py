@@ -367,6 +367,204 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             fresh_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
         )
 
+    def test_reviewed_evidence_time_ignores_late_session_completion_for_concepts_and_subskills(
+        self,
+    ):
+        completed_session = reviewed_session(
+            session_id="session.0035a",
+            mode="Practice",
+            content_id="concept.alpha-topic",
+            event_ids=["event.0035a"],
+            evaluation_result=evaluation_result(
+                session_id="session.0035a",
+                weighted_score=0.76,
+                overall_confidence=0.74,
+                concept_explanation_band=2,
+                usage_judgment_band=2,
+                tradeoff_band=3,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+        open_review_session = reviewed_session(
+            session_id="session.0035b",
+            mode="Practice",
+            content_id="concept.alpha-topic",
+            event_ids=["event.0035b"],
+            evaluation_result=evaluation_result(
+                session_id="session.0035b",
+                weighted_score=0.76,
+                overall_confidence=0.74,
+                concept_explanation_band=2,
+                usage_judgment_band=2,
+                tradeoff_band=3,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+
+        completed_profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [completed_session],
+                {
+                    "session.0035a": session_events(
+                        session_id="session.0035a",
+                        content_id="concept.alpha-topic",
+                        occurred_at_values=[
+                            "2026-03-20T10:00:00Z",
+                            "2026-03-20T10:01:00Z",
+                            "2026-03-25T10:00:00Z",
+                        ],
+                        event_types=[
+                            "evaluation_attached",
+                            "review_presented",
+                            "session_completed",
+                        ],
+                    ),
+                },
+            ),
+            user_id="user-1",
+            now="2026-03-27T10:00:00Z",
+        )
+        open_review_profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [open_review_session],
+                {
+                    "session.0035b": session_events(
+                        session_id="session.0035b",
+                        content_id="concept.alpha-topic",
+                        occurred_at_values=[
+                            "2026-03-20T10:00:00Z",
+                            "2026-03-20T10:01:00Z",
+                        ],
+                        event_types=[
+                            "evaluation_attached",
+                            "review_presented",
+                        ],
+                    ),
+                },
+            ),
+            user_id="user-1",
+            now="2026-03-27T10:00:00Z",
+        )
+
+        self.assertEqual(
+            completed_profile["concept_state"]["concept.alpha-topic"]["last_evidence_at"],
+            "2026-03-20T10:00:00Z",
+        )
+        self.assertEqual(
+            completed_profile["subskill_state"]["tradeoff_reasoning"]["last_evidence_at"],
+            "2026-03-20T10:00:00Z",
+        )
+        self.assertEqual(
+            completed_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
+            open_review_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
+        )
+        self.assertEqual(
+            completed_profile["trajectory_state"]["last_active_at"],
+            "2026-03-25T10:00:00Z",
+        )
+
+    def test_reviewed_mock_subskill_recency_uses_evaluation_time_not_completion_time(self):
+        mock_session = reviewed_mock_session(
+            session_id="session.0035c",
+            scenario_id="scenario.url-shortener.basic",
+            bound_concept_ids=["concept.url-shortener.storage-choice"],
+            event_ids=["event.0035c"],
+            evaluation_result=url_shortener_evaluation_result(
+                session_id="session.0035c",
+                weighted_score=0.74,
+                overall_confidence=0.72,
+                requirements_band=2,
+                decomposition_band=2,
+                storage_band=2,
+                scaling_band=2,
+                reliability_band=2,
+                tradeoff_band=3,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+
+        profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [mock_session],
+                {
+                    "session.0035c": session_events(
+                        session_id="session.0035c",
+                        content_id="scenario.url-shortener.basic",
+                        occurred_at_values=[
+                            "2026-03-20T11:00:00Z",
+                            "2026-03-20T11:01:00Z",
+                            "2026-03-23T11:00:00Z",
+                        ],
+                        event_types=[
+                            "evaluation_attached",
+                            "review_presented",
+                            "session_completed",
+                        ],
+                    ),
+                },
+            ),
+            user_id="user-1",
+            now="2026-03-27T11:00:00Z",
+        )
+
+        self.assertEqual(profile["concept_state"], {})
+        self.assertEqual(
+            profile["subskill_state"]["tradeoff_reasoning"]["last_evidence_at"],
+            "2026-03-20T11:00:00Z",
+        )
+        self.assertEqual(
+            profile["trajectory_state"]["last_active_at"],
+            "2026-03-23T11:00:00Z",
+        )
+
+    def test_reviewed_evidence_time_falls_back_without_semantic_review_events(self):
+        session = reviewed_session(
+            session_id="session.0035d",
+            mode="Study",
+            content_id="concept.alpha-topic",
+            event_ids=["event.0035d"],
+            evaluation_result=evaluation_result(
+                session_id="session.0035d",
+                weighted_score=0.7,
+                overall_confidence=0.68,
+                concept_explanation_band=2,
+                usage_judgment_band=2,
+                tradeoff_band=2,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+
+        profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [session],
+                {
+                    "session.0035d": session_events(
+                        session_id="session.0035d",
+                        content_id="concept.alpha-topic",
+                        occurred_at_values=[
+                            "2026-03-20T12:00:00Z",
+                            "2026-03-20T12:07:00Z",
+                        ],
+                        event_types=[
+                            "session_started",
+                            "session_completed",
+                        ],
+                    ),
+                },
+            ),
+            user_id="user-1",
+            now="2026-03-27T12:00:00Z",
+        )
+
+        self.assertEqual(
+            profile["concept_state"]["concept.alpha-topic"]["last_evidence_at"],
+            "2026-03-20T12:07:00Z",
+        )
+
     def test_mock_scenario_evidence_stays_out_of_concept_state_until_richer_mapping_exists(
         self,
     ):
