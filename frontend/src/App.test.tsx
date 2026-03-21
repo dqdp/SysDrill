@@ -11,8 +11,48 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
 
-  it("loads launch options and reaches review through the backend-driven flow", async () => {
+  it("loads a recommendation and reaches review through the recommendation-driven flow", async () => {
     fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          decision_id: "rec.0001",
+          policy_version: "bootstrap.recommendation.v1",
+          decision_mode: "rule_based",
+          candidate_actions: [
+            {
+              mode: "Study",
+              session_intent: "LearnNew",
+              target_type: "concept",
+              target_id: "concept.alpha-topic",
+              difficulty_profile: "introductory",
+              strictness_profile: "supportive",
+              session_size: "single_unit",
+              delivery_profile: "text_first",
+            },
+          ],
+          chosen_action: {
+            mode: "Study",
+            session_intent: "LearnNew",
+            target_type: "concept",
+            target_id: "concept.alpha-topic",
+            difficulty_profile: "introductory",
+            strictness_profile: "supportive",
+            session_size: "single_unit",
+            delivery_profile: "text_first",
+            rationale:
+              "Start with a supportive Study / LearnNew unit on 'Кэширование' because there is no reviewed evidence for this concept yet.",
+          },
+          supporting_signals: [
+            "no_prior_reviewed_attempt_for_target",
+            "bootstrap_exploration_bias",
+          ],
+          blocking_signals: [],
+          rationale:
+            "Start with a supportive Study / LearnNew unit on 'Кэширование' because there is no reviewed evidence for this concept yet.",
+          alternatives_summary:
+            "Practice actions remain available but are downranked until there is reviewed evidence for this concept.",
+        }),
+      )
       .mockResolvedValueOnce(
         jsonResponse({
           mode: "Study",
@@ -33,6 +73,7 @@ describe("App", () => {
         jsonResponse({
           session_id: "session.0001",
           state: "awaiting_answer",
+          recommendation_decision_id: "rec.0001",
           current_unit: {
             id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
             visible_prompt: "Explain caching.",
@@ -58,25 +99,84 @@ describe("App", () => {
             support_dependence_note: null,
           },
         }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          decision_id: "rec.0002",
+          policy_version: "bootstrap.recommendation.v1",
+          decision_mode: "rule_based",
+          candidate_actions: [
+            {
+              mode: "Study",
+              session_intent: "SpacedReview",
+              target_type: "concept",
+              target_id: "concept.alpha-topic",
+              difficulty_profile: "standard",
+              strictness_profile: "supportive",
+              session_size: "single_unit",
+              delivery_profile: "text_first",
+            },
+          ],
+          chosen_action: {
+            mode: "Study",
+            session_intent: "SpacedReview",
+            target_type: "concept",
+            target_id: "concept.alpha-topic",
+            difficulty_profile: "standard",
+            strictness_profile: "supportive",
+            session_size: "single_unit",
+            delivery_profile: "text_first",
+            rationale:
+              "Review the same concept again because the last reviewed session completed successfully.",
+          },
+          supporting_signals: ["recommendation_completed"],
+          blocking_signals: [],
+          rationale:
+            "Review the same concept again because the last reviewed session completed successfully.",
+          alternatives_summary:
+            "Reinforcement and remediation actions remain available if the next reviewed outcome weakens.",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          mode: "Study",
+          session_intent: "SpacedReview",
+          items: [
+            {
+              unit_id: "elu.concept_recall.study.spaced_review.concept.alpha-topic",
+              content_id: "concept.alpha-topic",
+              topic_slug: "alpha-topic",
+              display_title: "Кэширование",
+              visible_prompt: "Explain caching again with the main trade-offs.",
+              effective_difficulty: "standard",
+            },
+          ],
+        }),
       );
 
     render(<App />);
 
+    expect(
+      await screen.findByText(
+        "Start with a supportive Study / LearnNew unit on 'Кэширование' because there is no reviewed evidence for this concept yet.",
+      ),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Кэширование")).toBeInTheDocument();
     const practiceRemediateRadio = screen.getByRole("radio", {
       name: /Practice \/ Remediate/i,
     });
     expect(practiceRemediateRadio).toBeEnabled();
+    expect(screen.getByText("bootstrap.recommendation.v1")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(
         screen.getByRole("button", {
-          name: "Start session",
+          name: "Start recommended session",
         }),
       ).toBeEnabled();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
 
     expect(
       await screen.findByRole("textbox", {
@@ -105,20 +205,43 @@ describe("App", () => {
     expect(practiceRemediateRadio).toBeEnabled();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(fetchMock).toHaveBeenCalledTimes(7);
     });
-    expect(fetchMock.mock.calls[0]?.[0]).toContain("/runtime/manual-launch-options");
-    expect(fetchMock.mock.calls[1]?.[0]).toContain("/runtime/sessions/manual-start");
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/recommendations/next");
+    expect(fetchMock.mock.calls[1]?.[0]).toContain("/runtime/manual-launch-options");
+    expect(fetchMock.mock.calls[2]?.[0]).toContain(
+      "/runtime/sessions/start-from-recommendation",
+    );
+    expect(fetchMock.mock.calls[5]?.[0]).toContain("/recommendations/next");
+    expect(fetchMock.mock.calls[6]?.[0]).toContain("/runtime/manual-launch-options");
   });
 
-  it("shows backend errors explicitly on launcher load", async () => {
-    fetchMock.mockResolvedValueOnce(errorResponse(503, "runtime content is not configured"));
+  it("shows recommendation errors explicitly while leaving manual fallback visible", async () => {
+    fetchMock
+      .mockResolvedValueOnce(errorResponse(503, "runtime content is not configured"))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          mode: "Study",
+          session_intent: "LearnNew",
+          items: [
+            {
+              unit_id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              content_id: "concept.alpha-topic",
+              topic_slug: "alpha-topic",
+              display_title: "Кэширование",
+              visible_prompt: "Explain caching.",
+              effective_difficulty: "introductory",
+            },
+          ],
+        }),
+      );
 
     render(<App />);
 
     expect(
       await screen.findByText("runtime content is not configured"),
     ).toBeInTheDocument();
+    expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
   });
 });
 

@@ -13,9 +13,37 @@ export type LaunchOptionsResponse = {
   items: LaunchOption[];
 };
 
+export type RecommendationAction = {
+  mode: string;
+  session_intent: string;
+  target_type: string;
+  target_id: string;
+  difficulty_profile: string;
+  strictness_profile: string;
+  session_size: string;
+  delivery_profile: string;
+};
+
+export type RecommendationChosenAction = RecommendationAction & {
+  rationale: string;
+};
+
+export type RecommendationDecisionResponse = {
+  decision_id: string;
+  policy_version: string;
+  decision_mode: string;
+  candidate_actions: RecommendationAction[];
+  chosen_action: RecommendationChosenAction;
+  supporting_signals: string[];
+  blocking_signals: string[];
+  rationale: string;
+  alternatives_summary?: string;
+};
+
 export type ManualSessionResponse = {
   session_id: string;
   state: string;
+  recommendation_decision_id?: string | null;
   current_unit: {
     id: string;
     visible_prompt: string;
@@ -95,6 +123,30 @@ export async function startManualSession(
       mode,
       session_intent: sessionIntent,
       unit_id: unitId,
+      source: "web",
+    }),
+  });
+}
+
+export async function getNextRecommendation(): Promise<RecommendationDecisionResponse> {
+  return request<RecommendationDecisionResponse>("/recommendations/next", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: "demo-user",
+    }),
+  });
+}
+
+export async function startRecommendedSession(
+  decisionId: string,
+  action: RecommendationChosenAction,
+): Promise<ManualSessionResponse> {
+  return request<ManualSessionResponse>("/runtime/sessions/start-from-recommendation", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: "demo-user",
+      decision_id: decisionId,
+      action,
       source: "web",
     }),
   });

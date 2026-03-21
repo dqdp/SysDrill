@@ -2,11 +2,14 @@ import { startTransition, useEffect, useState } from "react";
 
 import {
   evaluateSession,
+  getNextRecommendation,
   getManualLaunchOptions,
+  startRecommendedSession,
   startManualSession,
   submitAnswer,
   type EvaluateResponse,
   type LaunchOption,
+  type RecommendationDecisionResponse,
 } from "./api";
 
 const LAUNCH_PROFILES = [
@@ -46,6 +49,11 @@ type Phase = "launcher" | "session" | "submitting" | "review";
 
 export function App() {
   const [profileIndex, setProfileIndex] = useState(0);
+  const [recommendation, setRecommendation] =
+    useState<RecommendationDecisionResponse | null>(null);
+  const [recommendationError, setRecommendationError] = useState("");
+  const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(true);
+  const [recommendationReloadKey, setRecommendationReloadKey] = useState(0);
   const [launchOptions, setLaunchOptions] = useState<LaunchOption[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [launcherError, setLauncherError] = useState<string>("");
@@ -64,7 +72,53 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
 
+    async function loadRecommendation() {
+      if (!isLauncherPhase) {
+        return;
+      }
+
+      setIsLoadingRecommendation(true);
+      setRecommendationError("");
+      setRecommendation(null);
+
+      try {
+        const response = await getNextRecommendation();
+
+        if (cancelled) {
+          return;
+        }
+
+        startTransition(() => {
+          setRecommendation(response);
+          setIsLoadingRecommendation(false);
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        startTransition(() => {
+          setRecommendationError(errorMessage(error));
+          setIsLoadingRecommendation(false);
+        });
+      }
+    }
+
+    void loadRecommendation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLauncherPhase, recommendationReloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadLaunchOptions() {
+      if (!isLauncherPhase) {
+        return;
+      }
+
       setIsLoadingOptions(true);
       setLauncherError("");
       setLaunchOptions([]);
@@ -102,7 +156,44 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeProfile.mode, activeProfile.sessionIntent]);
+  }, [activeProfile.mode, activeProfile.sessionIntent, isLauncherPhase]);
+
+  async function handleStartRecommendedSession() {
+    if (!recommendation) {
+      setSessionError("No recommendation is currently available.");
+      return;
+    }
+
+    setIsStartingSession(true);
+    setSessionError("");
+
+    try {
+      const response = await startRecommendedSession(
+        recommendation.decision_id,
+        recommendation.chosen_action,
+      );
+
+      startTransition(() => {
+        setProfileIndex(
+          profileIndexFor(
+            recommendation.chosen_action.mode,
+            recommendation.chosen_action.session_intent,
+          ),
+        );
+        setSessionId(response.session_id);
+        setVisiblePrompt(response.current_unit.visible_prompt);
+        setTranscript("");
+        setReview(null);
+        setPhase("session");
+        setIsStartingSession(false);
+      });
+    } catch (error) {
+      startTransition(() => {
+        setSessionError(errorMessage(error));
+        setIsStartingSession(false);
+      });
+    }
+  }
 
   async function handleStartSession() {
     if (!selectedUnitId) {
@@ -173,6 +264,9 @@ export function App() {
       setTranscript("");
       setSessionError("");
       setReview(null);
+      setRecommendation(null);
+      setRecommendationError("");
+      setRecommendationReloadKey((value) => value + 1);
     });
   }
 
@@ -203,6 +297,47 @@ export function App() {
               </button>
             ) : null}
           </div>
+
+          {phase === "launcher" ? (
+            <div className="launcher-section">
+              <div className="launcher-header">
+                <div>
+                  <p className="panel-label">Recommended next step</p>
+                  <h3>Deterministic recommendation</h3>
+                </div>
+                <span className="status-chip">
+                  {isLoadingRecommendation
+                    ? "Loading"
+                    : recommendation?.policy_version ?? "Unavailable"}
+                </span>
+              </div>
+
+              {recommendationError ? (
+                <p className="error-banner">{recommendationError}</p>
+              ) : null}
+
+              {recommendation ? (
+                <blockquote className="prompt-card">
+                  <p className="panel-label">
+                    {recommendation.chosen_action.mode} /{" "}
+                    {recommendation.chosen_action.session_intent}
+                  </p>
+                  <p>{recommendation.rationale}</p>
+                </blockquote>
+              ) : null}
+
+              {sessionError ? <p className="error-banner">{sessionError}</p> : null}
+
+              <button
+                className="primary-button"
+                disabled={isLoadingRecommendation || isStartingSession || !recommendation}
+                onClick={() => void handleStartRecommendedSession()}
+                type="button"
+              >
+                {isStartingSession ? "Starting session..." : "Start recommended session"}
+              </button>
+            </div>
+          ) : null}
 
           <div className="profile-grid" role="radiogroup" aria-label="Launch profile">
             {LAUNCH_PROFILES.map((profile, index) => {
@@ -381,4 +516,13 @@ function errorMessage(error: unknown): string {
   }
 
   return "Unexpected error";
+}
+
+function profileIndexFor(mode: string, sessionIntent: string): number {
+  const index = LAUNCH_PROFILES.findIndex(
+    (profile) =>
+      profile.mode === mode && profile.sessionIntent === sessionIntent,
+  );
+
+  return index >= 0 ? index : 0;
 }

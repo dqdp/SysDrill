@@ -337,6 +337,92 @@ class SessionRuntimeServiceTest(unittest.TestCase):
                 session_intent="LearnNew",
             )
 
+    def test_start_from_recommendation_resolves_action_and_emits_acceptance_event(self):
+        session = self.runtime.start_session_from_recommendation(
+            user_id="user-1",
+            decision_id="rec.0001",
+            action={
+                "mode": "Study",
+                "session_intent": "LearnNew",
+                "target_type": "concept",
+                "target_id": "concept.alpha-topic",
+                "difficulty_profile": "introductory",
+                "strictness_profile": "supportive",
+                "session_size": "single_unit",
+                "delivery_profile": "text_first",
+                "rationale": "Bootstrap recommendation.",
+            },
+            source="web",
+        )
+
+        self.assertEqual(session["state"], "awaiting_answer")
+        self.assertEqual(session["current_unit"]["id"], self.study_unit_id)
+        self.assertEqual(session["recommendation_decision_id"], "rec.0001")
+        events = self.runtime.list_session_events(session["session_id"])
+        self.assertEqual(
+            [event["event_type"] for event in events],
+            [
+                "recommendation_accepted",
+                "session_planned",
+                "session_started",
+                "unit_presented",
+            ],
+        )
+        self.assertEqual(events[0]["payload"]["decision_id"], "rec.0001")
+        self.assertEqual(events[0]["payload"]["target_id"], "concept.alpha-topic")
+
+    def test_start_from_recommendation_rejects_illegal_action_profiles(self):
+        with self.assertRaisesRegex(SessionRuntimeError, "difficulty_profile"):
+            self.runtime.start_session_from_recommendation(
+                user_id="user-1",
+                decision_id="rec.0001",
+                action={
+                    "mode": "Study",
+                    "session_intent": "LearnNew",
+                    "target_type": "concept",
+                    "target_id": "concept.alpha-topic",
+                    "difficulty_profile": "targeted",
+                    "strictness_profile": "supportive",
+                    "session_size": "single_unit",
+                    "delivery_profile": "text_first",
+                    "rationale": "Bootstrap recommendation.",
+                },
+            )
+
+    def test_recommendation_backed_evaluation_emits_completion_event(self):
+        session = self.runtime.start_session_from_recommendation(
+            user_id="user-1",
+            decision_id="rec.0001",
+            action={
+                "mode": "Study",
+                "session_intent": "LearnNew",
+                "target_type": "concept",
+                "target_id": "concept.alpha-topic",
+                "difficulty_profile": "introductory",
+                "strictness_profile": "supportive",
+                "session_size": "single_unit",
+                "delivery_profile": "text_first",
+                "rationale": "Bootstrap recommendation.",
+            },
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "Caching is storing frequently accessed data in a faster layer. "
+                "Use it for read-heavy paths. The trade-offs are stale data "
+                "and invalidation complexity."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+
+        result = self.runtime.evaluate_pending_session(session["session_id"])
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(result["session"]["state"], "review_presented")
+        self.assertEqual(events[-1]["event_type"], "recommendation_completed")
+        self.assertEqual(events[-1]["payload"]["decision_id"], "rec.0001")
+
     def test_practice_session_submission_and_evaluation_preserve_concept_recall_contract(self):
         session = self.runtime.start_manual_session(
             user_id="user-1",
@@ -605,6 +691,95 @@ class SessionRuntimeApiTest(unittest.TestCase):
         response = self.client.get("/runtime/manual-launch-options")
 
         self.assertEqual(response.status_code, 422)
+
+    def test_recommendations_next_endpoint_returns_structured_decision(self):
+        response = self.client.post(
+            "/recommendations/next",
+            json={"user_id": "demo-user"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["policy_version"], "bootstrap.recommendation.v1")
+        self.assertEqual(payload["decision_mode"], "rule_based")
+        self.assertEqual(payload["chosen_action"]["mode"], "Study")
+        self.assertEqual(payload["chosen_action"]["session_intent"], "LearnNew")
+        self.assertEqual(payload["chosen_action"]["target_id"], "concept.alpha-topic")
+        self.assertNotIn("unit_id", payload["chosen_action"])
+
+    def test_start_from_recommendation_endpoint_returns_session_snapshot(self):
+        recommendation_response = self.client.post(
+            "/recommendations/next",
+            json={"user_id": "demo-user"},
+        )
+        decision = recommendation_response.json()
+
+        response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": decision["decision_id"],
+                "action": decision["chosen_action"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["state"], "awaiting_answer")
+        self.assertEqual(payload["current_unit"]["id"], self.study_unit_id)
+        self.assertEqual(payload["recommendation_decision_id"], decision["decision_id"])
+
+    def test_start_from_recommendation_endpoint_returns_404_for_unknown_decision(self):
+        response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": "rec.missing",
+                "action": {
+                    "mode": "Study",
+                    "session_intent": "LearnNew",
+                    "target_type": "concept",
+                    "target_id": "concept.alpha-topic",
+                    "difficulty_profile": "introductory",
+                    "strictness_profile": "supportive",
+                    "session_size": "single_unit",
+                    "delivery_profile": "text_first",
+                    "rationale": "Bootstrap recommendation.",
+                },
+            },
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_start_from_recommendation_endpoint_returns_400_for_action_mismatch(self):
+        recommendation_response = self.client.post(
+            "/recommendations/next",
+            json={"user_id": "demo-user"},
+        )
+        decision = recommendation_response.json()
+        mismatched_action = copy.deepcopy(decision["chosen_action"])
+        mismatched_action["session_intent"] = "Reinforce"
+
+        response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": decision["decision_id"],
+                "action": mismatched_action,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_recommendations_next_endpoint_returns_503_without_runtime_content(self):
+        client = TestClient(create_app())
+
+        response = client.post(
+            "/recommendations/next",
+            json={"user_id": "demo-user"},
+        )
+
+        self.assertEqual(response.status_code, 503)
 
     def test_get_session_endpoint_returns_snapshot(self):
         start_response = self.client.post(

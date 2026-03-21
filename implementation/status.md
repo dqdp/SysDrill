@@ -9,12 +9,17 @@ The importer exporter MVP, content bundle reader, content catalog API, first
 `ExecutableLearningUnit` materialization path, and manual runtime bootstrap are
 complete. Deterministic review over that manual session loop is also complete,
 GitHub-native verification plus bounded smoke coverage are now in place, and a
-thin frontend shell now exercises the bounded launcher-to-review path. Current
-product feedback shows that the existing `Practice` units are too close to
-`Study`, but current conclusions are still based on a very small imported
-content sample. A bounded corpus sweep and `Practice` prompt differentiation are
-now both complete, so the next critical path item is recommendation-driven
-session start over that improved bounded action space.
+thin frontend shell now exercises the bounded launcher-to-review path. A
+bounded corpus sweep and `Practice` prompt differentiation are now complete,
+but importer analysis shows that current concept-field quality is still weak:
+`when_to_use` and `tradeoffs` are empty across the slice and
+`why_it_matters` largely duplicates `description`. Importer-side concept field
+hardening is now complete as well. Conservative scenario draft seeding from
+explicit example/problem pages is now complete too, including validator
+hardening for emitted scenario completeness. Deterministic recommendation is
+now complete as a process-local placeholder too: the primary frontend path can
+request one rationale-bearing next step and start runtime from the returned
+structured action, while the manual launcher remains as a bounded fallback.
 
 ## Prototype target
 
@@ -30,14 +35,14 @@ Recommendation is intentionally not required for the first prototype milestone.
 
 ## Current active milestone
 
-- `Milestone C. Practice differentiation and guided next-step prototype`
-- fast-path order: `006c0 -> 006c -> 007`
+- `Milestone C. Content enrichment and guided next-step prototype`
+- status: completed in current worktree
 
 ## Current active slice
 
-- roadmap item `007. Recommendation placeholder`
-- next code change should replace manual launch as the primary happy path
-  without collapsing recommendation into runtime orchestration
+- no post-`007` slice is selected yet
+- next work should be planned explicitly from the now-completed Milestone C
+  baseline
 
 ## Completed
 
@@ -188,6 +193,25 @@ Delivered:
 - browser-level demo verification against the local backend and frontend dev
   servers
 
+### 007. Recommendation placeholder
+
+Status:
+- completed in current worktree
+
+Delivered:
+- process-local deterministic recommendation engine over the current
+  executable concept-action surface
+- recommendation API returning one versioned, rationale-bearing structured
+  action instead of a raw `unit_id`
+- runtime entrypoint that starts a session from the chosen recommendation
+  action after legality and resolvability checks
+- append-only runtime interaction events only for
+  `recommendation_accepted` / `recommendation_completed`, while
+  generated/shown tracking remains internal to the recommendation store
+- recommendation-first frontend path with the manual launcher preserved as a
+  bounded fallback
+- green backend, frontend, and smoke verification
+
 ## Planned next
 
 ### 006c0. Bounded corpus acquisition and quality sweep
@@ -235,7 +259,7 @@ Delivered:
 ### 007. Recommendation placeholder
 
 Status:
-- planned
+- completed in current worktree
 
 Intent:
 - replace manual launch as the main learner path with one bounded,
@@ -246,6 +270,60 @@ Guardrails:
 - recommendation returns a structured action, not a raw `unit_id`
 - runtime remains the owner of action resolution and session creation
 - learner-state mutation still does not bypass events or evaluation
+
+Delivered:
+- deterministic bootstrap recommendation selection over current launchable
+  concept actions
+- runtime start-from-recommendation contract without synthetic pre-session
+  `session_id`
+- recommendation-generated/shown tracked in process-local records, not forced
+  into the runtime event log
+- recommendation-first frontend happy path while preserving manual fallback
+
+### 006d. Concept field extraction hardening
+
+Status:
+- completed in current worktree
+
+Intent:
+- improve importer-side concept field extraction so the draft corpus contains
+  less duplicated semantics and more usable `when_to_use` / `tradeoffs`
+  coverage
+
+Guardrails:
+- preserve explicit provenance and `review_required` posture
+- prefer sparse-but-honest output over invented semantic richness
+- do not change backend or product contracts during this slice
+
+Delivered:
+- non-empty `when_to_use` coverage on `9/10` topics in the bounded corpus
+- non-empty `tradeoffs` coverage on `8/10` topics in the bounded corpus
+- `why_it_matters == description` reduced from `10/10` to `0/10`
+- unchanged backend compatibility over the re-imported corpus
+
+### 006e. Scenario draft seeding
+
+Status:
+- completed in current worktree
+
+Intent:
+- seed the first conservative `Scenario` drafts from explicitly
+  example/interview/problem-like source pages
+
+Guardrails:
+- fail closed on ordinary concept chapters
+- require complete scenario field coverage for any emitted scenario
+- preserve provenance and review posture
+
+Delivered:
+- first bounded scenario seeding path from explicit source material:
+  `troubleshooting-example -> scenario.troubleshooting-example`
+- fail-closed behavior for ordinary concept pages and interview-format theory
+  pages without a concrete problem statement
+- validator enforcement for required scenario field completeness
+- package/export preservation of scenario-bearing bundles
+- bounded live-source verification showing one schema-valid seeded scenario and
+  no scenario regression on `caching-strategies`
 
 ## Known risks
 
@@ -263,6 +341,9 @@ Guardrails:
 ## Exit condition for current phase
 
 The current phase is complete when:
+- concept-field extraction quality has improved over the current placeholder
+  baseline
+- at least one explicit source page can yield a valid seeded scenario draft
 - recommendation can then return one bounded next-step action and runtime can
   start from that action without changing the manual prototype loop semantics
   already demonstrated in Milestone B

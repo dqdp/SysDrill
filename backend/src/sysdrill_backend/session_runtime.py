@@ -91,55 +91,115 @@ class SessionRuntime:
     ) -> dict[str, Any]:
         with self._state_lock:
             unit = self._resolve_unit(mode, session_intent, unit_id)
-            session_id = self._next_session_id()
-            session = {
-                "session_id": session_id,
-                "user_id": user_id,
-                "mode": mode,
-                "session_intent": session_intent,
-                "strictness_profile": self._strictness_profile(mode),
-                "source": source,
-                "trace_id": "trace.{0}".format(session_id),
-                "state": "planned",
+            return self._start_session(
+                user_id=user_id,
+                mode=mode,
+                session_intent=session_intent,
+                unit=unit,
+                source=source,
+            )
+
+    def start_session_from_recommendation(
+        self,
+        user_id: str,
+        decision_id: str,
+        action: dict[str, Any],
+        source: str = "web",
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            unit = self._resolve_recommendation_action(action)
+            return self._start_session(
+                user_id=user_id,
+                mode=action["mode"],
+                session_intent=action["session_intent"],
+                unit=unit,
+                source=source,
+                recommendation_context={
+                    "decision_id": decision_id,
+                    "action": copy.deepcopy(action),
+                },
+            )
+
+    def _start_session(
+        self,
+        user_id: str,
+        mode: str,
+        session_intent: str,
+        unit: dict[str, Any],
+        source: str,
+        recommendation_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        unit_id = unit["id"]
+        session_id = self._next_session_id()
+        session = {
+            "session_id": session_id,
+            "user_id": user_id,
+            "mode": mode,
+            "session_intent": session_intent,
+            "strictness_profile": self._strictness_profile(mode),
+            "source": source,
+            "trace_id": "trace.{0}".format(session_id),
+            "state": "planned",
+            "planned_unit_ids": [unit_id],
+            "current_unit_id": unit_id,
+            "current_unit": copy.deepcopy(unit),
+            "event_ids": [],
+            "last_evaluation_request": None,
+            "last_evaluation_result": None,
+            "last_review_report": None,
+            "recommendation_decision_id": (
+                recommendation_context["decision_id"] if recommendation_context else None
+            ),
+        }
+        self._sessions[session_id] = session
+
+        if recommendation_context is not None:
+            action = recommendation_context["action"]
+            self._emit_event(
+                session,
+                "recommendation_accepted",
+                {
+                    "decision_id": recommendation_context["decision_id"],
+                    "recommended_mode": action["mode"],
+                    "recommended_intent": action["session_intent"],
+                    "target_type": action["target_type"],
+                    "target_id": action["target_id"],
+                    "difficulty_profile": action["difficulty_profile"],
+                    "strictness_profile": action["strictness_profile"],
+                    "session_size": action["session_size"],
+                    "delivery_profile": action["delivery_profile"],
+                },
+            )
+
+        self._emit_event(
+            session,
+            "session_planned",
+            {
                 "planned_unit_ids": [unit_id],
                 "current_unit_id": unit_id,
-                "current_unit": copy.deepcopy(unit),
-                "event_ids": [],
-                "last_evaluation_request": None,
-                "last_evaluation_result": None,
-                "last_review_report": None,
-            }
-            self._sessions[session_id] = session
+            },
+        )
+        session["state"] = "started"
+        self._emit_event(
+            session,
+            "session_started",
+            {
+                "current_unit_id": unit_id,
+                "strictness_profile": session["strictness_profile"],
+            },
+        )
+        session["state"] = "unit_presented"
+        self._emit_event(
+            session,
+            "unit_presented",
+            {
+                "unit_id": unit_id,
+                "visible_prompt": unit["visible_prompt"],
+            },
+        )
+        session["state"] = "awaiting_answer"
 
-            self._emit_event(
-                session,
-                "session_planned",
-                {
-                    "planned_unit_ids": [unit_id],
-                    "current_unit_id": unit_id,
-                },
-            )
-            session["state"] = "started"
-            self._emit_event(
-                session,
-                "session_started",
-                {
-                    "current_unit_id": unit_id,
-                    "strictness_profile": session["strictness_profile"],
-                },
-            )
-            session["state"] = "unit_presented"
-            self._emit_event(
-                session,
-                "unit_presented",
-                {
-                    "unit_id": unit_id,
-                    "visible_prompt": unit["visible_prompt"],
-                },
-            )
-            session["state"] = "awaiting_answer"
-
-            return self.get_session(session_id)
+        return self.get_session(session_id)
 
     def get_session(self, session_id: str) -> dict[str, Any]:
         with self._state_lock:
@@ -185,6 +245,34 @@ class SessionRuntime:
                 )
 
             return copy.deepcopy(launch_options)
+
+    def list_user_reviewed_outcomes(self, user_id: str) -> list[dict[str, Any]]:
+        with self._state_lock:
+            outcomes = []
+            for session in self._sessions.values():
+                if session["user_id"] != user_id:
+                    continue
+                evaluation_result = session.get("last_evaluation_result")
+                if not isinstance(evaluation_result, dict):
+                    continue
+                content_ids = session["current_unit"].get("source_content_ids", [])
+                content_id = content_ids[0] if content_ids else None
+                if not isinstance(content_id, str) or not content_id:
+                    continue
+                outcomes.append(
+                    {
+                        "session_id": session["session_id"],
+                        "content_id": content_id,
+                        "mode": session["mode"],
+                        "session_intent": session["session_intent"],
+                        "weighted_score": evaluation_result["weighted_score"],
+                        "missing_dimensions": list(evaluation_result.get("missing_dimensions", [])),
+                        "recommendation_decision_id": session.get("recommendation_decision_id"),
+                    }
+                )
+
+            outcomes.sort(key=lambda outcome: outcome["session_id"])
+            return copy.deepcopy(outcomes)
 
     def submit_answer(
         self,
@@ -289,6 +377,15 @@ class SessionRuntime:
                     "missed_dimension_count": len(review_report.get("missed_dimensions", [])),
                 },
             )
+            if isinstance(session.get("recommendation_decision_id"), str):
+                self._emit_event(
+                    session,
+                    "recommendation_completed",
+                    {
+                        "decision_id": session["recommendation_decision_id"],
+                        "completion_state": "review_presented",
+                    },
+                )
 
             return {
                 "session": self.get_session(session_id),
@@ -336,6 +433,88 @@ class SessionRuntime:
             )
 
         raise UnitNotFoundError("unknown unit_id: {0}".format(unit_id))
+
+    def _resolve_recommendation_action(self, action: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(action, dict):
+            raise SessionRuntimeError("recommendation action must be an object")
+
+        target_type = action.get("target_type")
+        if target_type != "concept":
+            raise SessionRuntimeError(
+                "unsupported recommendation action target_type: {0}".format(target_type)
+            )
+
+        mode = action.get("mode")
+        session_intent = action.get("session_intent")
+        target_id = action.get("target_id")
+        difficulty_profile = action.get("difficulty_profile")
+        strictness_profile = action.get("strictness_profile")
+        session_size = action.get("session_size")
+        delivery_profile = action.get("delivery_profile")
+
+        if not all(
+            isinstance(value, str) and value
+            for value in (
+                mode,
+                session_intent,
+                target_id,
+                difficulty_profile,
+                strictness_profile,
+                session_size,
+                delivery_profile,
+            )
+        ):
+            raise SessionRuntimeError("recommendation action contains invalid fields")
+
+        units = self._units_by_mode_intent.get((mode, session_intent))
+        if units is None:
+            raise UnitModeIntentMismatchError(
+                "unsupported runtime mode/session_intent combination: {0}/{1}".format(
+                    mode,
+                    session_intent,
+                )
+            )
+
+        matching_units = [
+            unit for unit in units.values() if target_id in unit.get("source_content_ids", [])
+        ]
+        if not matching_units:
+            raise SessionRuntimeError(
+                "recommendation action target_id '{0}' is not currently resolvable".format(
+                    target_id
+                )
+            )
+        if len(matching_units) > 1:
+            raise SessionRuntimeError(
+                "recommendation action target_id '{0}' resolves ambiguously".format(target_id)
+            )
+
+        unit = matching_units[0]
+        if difficulty_profile != unit.get("effective_difficulty"):
+            raise SessionRuntimeError(
+                (
+                    "recommendation action difficulty_profile '{0}' does not match resolved unit"
+                ).format(difficulty_profile)
+            )
+        expected_strictness_profile = self._strictness_profile(mode)
+        if strictness_profile != expected_strictness_profile:
+            raise SessionRuntimeError(
+                (
+                    "recommendation action strictness_profile '{0}' does not match resolved unit"
+                ).format(strictness_profile)
+            )
+        if session_size != "single_unit":
+            raise SessionRuntimeError(
+                "recommendation action session_size '{0}' is unsupported".format(session_size)
+            )
+        if delivery_profile != "text_first":
+            raise SessionRuntimeError(
+                "recommendation action delivery_profile '{0}' is unsupported".format(
+                    delivery_profile
+                )
+            )
+
+        return copy.deepcopy(unit)
 
     def _require_session(self, session_id: str) -> dict[str, Any]:
         session = self._sessions.get(session_id)
@@ -396,6 +575,7 @@ class SessionRuntime:
             "event_ids": list(session["event_ids"]),
             "last_evaluation_result": copy.deepcopy(session["last_evaluation_result"]),
             "last_review_report": copy.deepcopy(session["last_review_report"]),
+            "recommendation_decision_id": session.get("recommendation_decision_id"),
         }
 
     def _unit_family(self, unit: dict[str, Any]) -> str:

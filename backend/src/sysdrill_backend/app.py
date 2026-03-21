@@ -10,6 +10,11 @@ from sysdrill_backend.content_catalog_api import (
     build_topic_detail,
     build_topic_summary,
 )
+from sysdrill_backend.recommendation_engine import (
+    NoRecommendationCandidatesError,
+    RecommendationDecisionNotFoundError,
+    RecommendationEngine,
+)
 from sysdrill_backend.session_runtime import (
     SessionNotFoundError,
     SessionRuntime,
@@ -42,18 +47,49 @@ class SubmitRuntimeAnswerRequest(BaseModel):
     response_latency_ms: NonNegativeInt | None = None
 
 
+class RecommendationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: StrictStr
+
+
+class RecommendationActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: StrictStr
+    session_intent: StrictStr
+    target_type: StrictStr
+    target_id: StrictStr
+    difficulty_profile: StrictStr
+    strictness_profile: StrictStr
+    session_size: StrictStr
+    delivery_profile: StrictStr
+    rationale: StrictStr
+
+
+class StartFromRecommendationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: StrictStr
+    decision_id: StrictStr
+    action: RecommendationActionRequest
+    source: StrictStr = "web"
+
+
 def create_app(
     content_export_root: str | Path | None = None,
     allow_draft_bundles: bool = False,
 ) -> FastAPI:
     catalog = {}
     runtime = None
+    recommendation_engine = None
     if content_export_root is not None:
         catalog = load_topic_catalog(
             export_root=content_export_root,
             allow_draft_bundles=allow_draft_bundles,
         )
         runtime = SessionRuntime(catalog)
+        recommendation_engine = RecommendationEngine(runtime)
 
     app = FastAPI(title="System Design Trainer API")
 
@@ -109,6 +145,49 @@ def create_app(
         except SessionRuntimeError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/recommendations/next")
+    def get_next_recommendation(request: RecommendationRequest) -> dict:
+        if runtime is None or recommendation_engine is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            return recommendation_engine.next_recommendation(user_id=request.user_id)
+        except NoRecommendationCandidatesError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/runtime/sessions/start-from-recommendation")
+    def start_session_from_recommendation(request: StartFromRecommendationRequest) -> dict:
+        if runtime is None or recommendation_engine is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            decision = recommendation_engine.get_decision(request.decision_id)
+        except RecommendationDecisionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        action = request.action.model_dump()
+        if decision["user_id"] != request.user_id:
+            raise HTTPException(status_code=400, detail="decision_id does not belong to user_id")
+        if action != decision["chosen_action"]:
+            raise HTTPException(
+                status_code=400,
+                detail="request action does not match stored chosen_action",
+            )
+
+        try:
+            session = runtime.start_session_from_recommendation(
+                user_id=request.user_id,
+                decision_id=request.decision_id,
+                action=action,
+                source=request.source,
+            )
+            recommendation_engine.mark_accepted(request.decision_id, session["session_id"])
+            return session
+        except UnitNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except UnitModeIntentMismatchError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except SessionRuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/runtime/sessions/{session_id}")
     def get_runtime_session(session_id: str) -> dict:
         if runtime is None:
@@ -149,6 +228,10 @@ def create_app(
             raise HTTPException(status_code=503, detail="runtime content is not configured")
         try:
             result = runtime.evaluate_pending_session(session_id)
+            if recommendation_engine is not None:
+                decision_id = result["session"].get("recommendation_decision_id")
+                if isinstance(decision_id, str) and decision_id:
+                    recommendation_engine.mark_completed(decision_id, session_id)
             return {
                 "session_id": result["session"]["session_id"],
                 "state": result["session"]["state"],

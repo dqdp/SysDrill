@@ -2,7 +2,23 @@
 
 ## Status
 
-- planned
+- completed in current worktree
+
+## Delivered
+
+- process-local deterministic `recommendation_engine` with versioned,
+  rationale-bearing `RecommendationDecision` records
+- `POST /recommendations/next` backend surface returning structured actions
+  rather than `unit_id`
+- `POST /runtime/sessions/start-from-recommendation` runtime entrypoint that
+  validates and resolves the chosen structured action
+- append-only runtime interaction events only for
+  `recommendation_accepted` / `recommendation_completed`, while
+  `generated` / `shown` remain internal recommendation records
+- thin frontend wiring that makes recommendation the primary happy path while
+  preserving the manual launcher as a bounded fallback
+- backend, frontend, and smoke verification over the
+  recommendation-to-review flow
 
 ## Goal
 
@@ -16,17 +32,25 @@ to start from the chosen structured action without:
 - pretending a full learner-projection subsystem already exists
 - expanding beyond the currently implemented `concept_recall` prototype path
 
-## Why this follows 006c
+## Why this follows 006e
 
 Milestone B is now demoable through a learner-visible frontend shell, but
 current product feedback shows that the implemented `Practice` units are still
 too close to `Study`. Recommendation should follow a narrow `Practice`
 enrichment slice so that it ranks over a more meaningful bounded action space.
 
-After `006c` is complete, the next critical path is to stop depending on manual
-launcher choice for the main learner flow and to validate the documented
-`Learning Intelligence -> Session Runtime` hand-off at a narrow, deterministic
-level.
+After `006c`, `006d`, and `006e` are complete, the next critical path is to
+stop depending on manual launcher choice for the main learner flow and to
+validate the documented `Learning Intelligence -> Session Runtime` hand-off at
+a narrow, deterministic level.
+
+The new scenario-bearing content does not yet change the executable action
+space:
+- runtime remains `concept_recall`-only
+- evaluation remains `binding.concept_recall.v1`
+- recommendation should therefore still rank over the current executable
+  concept-action surface rather than pretend scenario-family execution already
+  exists
 
 ## In scope
 
@@ -79,6 +103,8 @@ level.
 - no learner-state mutation may bypass the append-only event/evaluation path
 - current manual launcher may remain as a fallback/dev surface but should stop
   being the primary learner path
+- this slice must not invent synthetic pre-session `session_id` values just to
+  satisfy recommendation lifecycle logging
 
 ## Hidden assumptions
 
@@ -90,6 +116,9 @@ level.
   personalization
 - current action targeting is effectively concept-level because the only
   implemented unit family is `concept_recall`
+- recommendation-generated and recommendation-shown tracking will live in a
+  process-local recommendation record store until the repository defines a
+  first-class pre-session event identity contract
 
 ## Architectural approaches considered
 
@@ -145,6 +174,7 @@ Decision:
   - generates bounded `RecommendationAction` candidates
   - ranks them deterministically
   - emits a versioned, rationale-bearing `RecommendationDecision`
+  - records generated/shown decision metadata process-locally in this slice
 - add a runtime action-acceptance entrypoint that:
   - accepts the chosen structured action unchanged from the recommendation layer
   - validates that the action is legal and currently resolvable
@@ -171,6 +201,8 @@ Disallowed shortcuts:
 - raw UI heuristics in the client
 - hidden `unit_id` recommendation as the public action contract
 - direct learner-state mutation from recommendation
+- synthetic recommendation-only `session_id` allocation before runtime creates a
+  real session
 
 ## Recommendation contract proposal
 
@@ -283,16 +315,18 @@ Guardrails:
 ## Recommendation lifecycle events
 
 Required in this slice:
-- `recommendation_generated`
-- `recommendation_shown`
 - `recommendation_accepted`
 - `recommendation_completed`
 
 Scope note:
+- `recommendation_generated` and `recommendation_shown` are recorded in this
+  slice as process-local recommendation decision records, not append-only
+  interaction-log events, because the current event model requires a real
+  `session_id`
 - `recommendation_skipped` can stay out of scope until the frontend exposes a
   real skip affordance
-- for the thin frontend shell, `recommendation_shown` may be emitted when the
-  recommendation response is returned to the interaction layer
+- for the thin frontend shell, “shown” may be recorded when the recommendation
+  response is returned to the interaction layer
 
 ## TDD plan
 
@@ -307,6 +341,8 @@ Recommendation engine contract:
 - prefers remediation when reviewed evidence is weak
 - preserves deterministic ordering and rationale
 - rejects empty candidate space explicitly
+- records generated/shown recommendation metadata without allocating a fake
+  `session_id`
 
 ### Phase 2: runtime action acceptance tests
 
@@ -318,6 +354,7 @@ Runtime contract:
   the client
 - rejects unsupported or unresolvable actions fail-closed
 - emits recommendation acceptance/completion events at the right boundaries
+- does not require the client to send `unit_id`
 
 ### Phase 3: API contract tests
 
@@ -330,6 +367,8 @@ API contract:
 - invalid action payloads or illegal combinations return explicit `4xx`
   errors
 - health-only startup remains legal when content is not configured
+- recommendation-generated/shown state remains internal to the backend and does
+  not require extra frontend event calls in this slice
 
 ### Phase 4: frontend flow tests
 
@@ -347,15 +386,15 @@ Frontend contract:
 Verify locally and in CI:
 - Python verification and smoke remain green
 - frontend verification remains green
-- browser-level flow from recommendation to review works against the local
-  backend/frontend pair
+- browser-level flow may be verified separately when a local browser automation
+  harness is available
 
 ## Test contract
 
 - recommendation output is deterministic for the same process-local history
 - recommendation response does not expose `unit_id` as the action contract
 - action acceptance validates action legality and current resolvability
-- generated recommendation events preserve decision/action traceability
+- generated recommendation records preserve decision/action traceability
 - current manual flow remains available unless explicitly removed in a later
   slice
 - no recommendation code is embedded in frontend heuristics
@@ -377,10 +416,13 @@ Verify locally and in CI:
   could smuggle illegal actions through a recommendation-shaped API
 - weak spot: if recommendation starts ranking raw launchable units instead of
   structured actions, the placeholder will already be off-contract
+- weak spot: the current interaction-event contract requires `session_id`, so
+  pre-session recommendation lifecycle tracking is intentionally split between
+  recommendation records and append-only runtime events
 - hidden assumption: the placeholder can treat the latest reviewed evaluation
   as enough signal for bounded remediation/reinforcement heuristics
 - hidden assumption: recommendation-generated and recommendation-shown may be
-  emitted back-to-back in the current thin UI
+  recorded back-to-back in the current thin UI
 - no contradiction found with v2.2 baseline if the placeholder stays explicit
   about its bootstrap scope and does not masquerade as a full learner model
 
@@ -397,5 +439,5 @@ No ADR is required if this slice:
 - recommendation replaces manual launch as the primary learner path
 - runtime starts from structured recommendation actions, not client-built
   `unit_id`s
-- browser-level recommendation -> review flow is verified
+- frontend build/test verification is green
 - implementation docs remain in sync

@@ -62,27 +62,33 @@ Exit criteria:
 Status:
 - completed in current worktree
 
-### Milestone C. Practice differentiation and guided next-step prototype
+### Milestone C. Content enrichment and guided next-step prototype
 
 Includes:
 - `006c0. Bounded corpus acquisition and quality sweep`
 - `006c. Practice prompt expansion`
+- `006d. Concept field extraction hardening`
+- `006e. Scenario draft seeding`
 - `007. Recommendation placeholder`
 
 Goal:
-- acquire a wider bounded corpus, make `Practice` meaningfully different from
-  `Study` inside the current `concept_recall` prototype seam, then replace
-  manual launch with a deterministic next-step recommendation
+- acquire a wider bounded corpus, improve concept-field quality, make
+  `Practice` meaningfully different from `Study`, seed the first conservative
+  scenario drafts, then replace manual launch with a deterministic next-step
+  recommendation
 
 Exit criteria:
 - a wider bounded corpus is imported and backend-compatible
+- concept bundles expose meaningfully better `when_to_use` / `tradeoffs`
+  coverage than the current placeholder baseline
+- at least one valid scenario draft can be seeded from explicit source material
 - `Practice` launchable units are visibly richer than `Study` without changing
   the current runtime/evaluation contracts
 - recommendation returns one bounded action and runtime can start from that
   action without changing the Milestone B loop semantics
 
 Status:
-- next critical milestone
+- completed in current worktree
 
 ## Ordered slices
 
@@ -203,7 +209,7 @@ Why now:
 ### 007. Recommendation placeholder
 
 Status:
-- pending
+- completed in current worktree
 
 Goal:
 - add deterministic next-step selection over the loaded content set
@@ -215,6 +221,13 @@ Prototype dependency:
 Guardrail:
 - recommendation must stay a structured action surface, even if the first
   version is rule-based and narrow
+
+Delivered:
+- deterministic recommendation engine over the current concept-action surface
+- runtime start-from-recommendation seam with structured action validation
+- recommendation-first frontend happy path with manual fallback preserved
+- append-only runtime events only for acceptance/completion boundaries
+- green backend, frontend, and smoke verification
 
 ### 006c0. Bounded corpus acquisition and quality sweep
 
@@ -247,6 +260,45 @@ Why before recommendation:
 - recommendation should sit on top of a more meaningful action space, not paper
   over a weak unit shape
 - this slice should follow `006c0`, not precede corpus acquisition
+
+### 006d. Concept field extraction hardening
+
+Status:
+- completed in current worktree
+
+Goal:
+- improve importer-side extraction for `when_to_use`, `tradeoffs`, and
+  `why_it_matters` so exported concept bundles are less sparse and less
+  duplicative without changing product contracts
+
+Why before recommendation:
+- recommendation should not be planned on top of concept fields that are mostly
+  empty or duplicated placeholders
+- this slice improves the concept substrate for later scenario seeding and
+  recommendation logic
+
+### 006e. Scenario draft seeding
+
+Status:
+- completed in current worktree
+
+Goal:
+- seed the first conservative `Scenario` content objects from explicitly
+  problem-like source pages without synthesizing scenarios from ordinary concept
+  chapters
+
+Why before recommendation:
+- the content kernel is still scenario-empty today
+- this slice tests whether the current source corpus supports honest scenario
+  extraction before recommendation or later runtime work starts depending on
+  scenario-bearing content
+
+Outcome:
+- first conservative scenario seeding path is now proven for explicit
+  example/problem material
+- scenario completeness is validator-enforced
+- current runtime/evaluation remain unchanged, so recommendation still follows
+  over the existing executable concept-action space
 
 ### 008. Practice frontend shell
 
