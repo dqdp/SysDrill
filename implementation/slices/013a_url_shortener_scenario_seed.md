@@ -2,7 +2,7 @@
 
 ## Status
 
-- planned
+- in_progress
 
 ## Goal
 
@@ -196,6 +196,22 @@ The slice must not assume:
 ## TDD plan
 
 Write tests first.
+
+### Test file contract
+
+- `backend/tests/test_content_api.py`
+  Locks catalog summary/detail projection for the new `url-shortener` fixture,
+  including `scenario_count = 1` and projection of required scenario fields.
+- `backend/tests/test_executable_learning_unit_materializer.py`
+  Locks the new `MockInterview / ReadinessCheck` materialization pair, seeded
+  unit metadata, deterministic output, and negative materialization cases.
+- `backend/tests/test_session_runtime.py`
+  Locks narrow runtime-side consumption of the new unit metadata through
+  `list_manual_launch_options(...)`, including scenario title and prompt
+  projection.
+- `backend/tests/test_recommendation_engine.py`
+  Acts as a regression guard: adding the new pair in `013a` must not broaden
+  the recommendation action space before `013b`.
 
 ### Test layer 1: content fixture and catalog loading
 

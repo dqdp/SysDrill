@@ -34,7 +34,7 @@ class FastApiAppTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(
                 [item["topic_slug"] for item in response.json()],
-                ["alpha-topic", "zeta-topic"],
+                ["alpha-topic", "url-shortener", "zeta-topic"],
             )
         finally:
             for key, value in original_values.items():

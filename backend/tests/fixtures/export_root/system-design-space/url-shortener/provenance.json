@@ -1,0 +1,37 @@
+{
+  "package_id": "topicpkg.url-shortener",
+  "topic_slug": "url-shortener",
+  "run_id": "test-run",
+  "source_name": "system-design.space",
+  "source_document_ids": [
+    "url-shortener"
+  ],
+  "manifest": {
+    "path": "runs/test-run/manifest.json",
+    "seed": "https://system-design.space/chapter/url-shortener",
+    "profile": "chapters_only"
+  },
+  "documents": [
+    {
+      "document_id": "url-shortener",
+      "source_name": "system-design.space",
+      "source_url": "https://system-design.space/chapter/url-shortener",
+      "fetched_at": "2026-03-21T10:00:00+00:00",
+      "fetch_mode": "http_only",
+      "http_status": 200,
+      "content_type": "text/html",
+      "source_hash": "sha256:test-url-shortener",
+      "raw_html_path": "runs/test-run/documents/url-shortener/raw.html",
+      "normalized_text_path": "runs/test-run/documents/url-shortener/normalized.txt",
+      "parser_version": "0.1.0"
+    }
+  ],
+  "artifacts": {
+    "semantic_draft_path": "runs/test-run/drafts/url-shortener/semantic-draft.json",
+    "validation_report_path": "runs/test-run/reports/url-shortener/validation-report.json",
+    "draft_topic_package_path": "runs/test-run/packages/url-shortener/draft-topic-package.json",
+    "fragments_paths": [
+      "runs/test-run/fragments/url-shortener/fragments.json"
+    ]
+  }
+}

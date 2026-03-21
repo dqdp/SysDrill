@@ -1,0 +1,90 @@
+package_id: topicpkg.url-shortener
+topic_slug: url-shortener
+generated_at: "2026-03-21T10:00:00+00:00"
+tool_version: "0.1.0"
+source_document_ids:
+  - url-shortener
+canonical_content:
+  concepts: []
+  patterns: []
+  scenarios:
+    - id:
+        value: scenario.url-shortener.basic
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Design a URL Shortener"
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      prompt:
+        value: "Design a URL Shortener for a read-heavy product with high availability requirements."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.prompt.001]
+            extraction_mode: llm_assisted
+            confidence: 0.83
+        review_required: true
+      content_difficulty_baseline:
+        value: standard
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.difficulty.001]
+            extraction_mode: llm_assisted
+            confidence: 0.76
+        review_required: true
+      expected_focus_areas:
+        value:
+          - id_generation
+          - storage_choice
+          - read_scaling
+          - caching
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.focus.001]
+            extraction_mode: llm_assisted
+            confidence: 0.71
+        review_required: true
+      canonical_axes:
+        value:
+          - read_write_ratio
+          - redirect_latency
+          - collision_avoidance
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.axes.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+      canonical_follow_up_candidates:
+        value:
+          - "How would you generate short identifiers without creating avoidable collisions?"
+          - "What would change if write traffic grew much faster than expected?"
+          - "Where would caching help, and where could it create correctness risk?"
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.follow-up.001]
+            extraction_mode: llm_assisted
+            confidence: 0.7
+        review_required: true
+canonical_support:
+  hint_ladders: []
+learning_design_drafts:
+  candidate_card_types:
+    - mini_scenario
+review:
+  status: needs_review
+  required_actions:
+    - verify scenario prompt and follow-up envelope cues
+validation_summary:
+  schema_valid: true
+  errors: []
+  warnings:
+    - "scenario prompt remains review-required"

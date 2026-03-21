@@ -838,14 +838,28 @@ class SessionRuntime:
             if not isinstance(canonical_content, dict):
                 canonical_content = {}
             concepts = canonical_content.get("concepts", [])
-            if not isinstance(concepts, list):
-                continue
+            if isinstance(concepts, list):
+                for concept in concepts:
+                    if not isinstance(concept, dict):
+                        continue
+                    content_id = _unwrap_payload(concept.get("id"))
+                    display_title = _unwrap_payload(concept.get("title"))
+                    if isinstance(content_id, str) and content_id:
+                        content_metadata_by_id[content_id] = {
+                            "topic_slug": topic_slug,
+                            "display_title": (
+                                display_title if isinstance(display_title, str) else topic_slug
+                            ),
+                        }
 
-            for concept in concepts:
-                if not isinstance(concept, dict):
+            scenarios = canonical_content.get("scenarios", [])
+            if not isinstance(scenarios, list):
+                continue
+            for scenario in scenarios:
+                if not isinstance(scenario, dict):
                     continue
-                content_id = _unwrap_payload(concept.get("id"))
-                display_title = _unwrap_payload(concept.get("title"))
+                content_id = _unwrap_payload(scenario.get("id"))
+                display_title = _unwrap_payload(scenario.get("title"))
                 if isinstance(content_id, str) and content_id:
                     content_metadata_by_id[content_id] = {
                         "topic_slug": topic_slug,

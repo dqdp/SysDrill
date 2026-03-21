@@ -156,7 +156,9 @@ class RecommendationEngine:
     def _candidate_records(self) -> list[dict[str, Any]]:
         records = []
         for mode, session_intent in supported_materialization_pairs():
-            pair_order = _ACTION_PAIR_ORDER[(mode, session_intent)]
+            pair_order = _ACTION_PAIR_ORDER.get((mode, session_intent))
+            if pair_order is None:
+                continue
             launch_options = self._runtime.list_manual_launch_options(
                 mode=mode,
                 session_intent=session_intent,

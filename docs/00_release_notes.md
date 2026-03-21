@@ -12,6 +12,10 @@
 - hardened the manual runtime/content path against duplicate in-process session
   transitions, symlinked configured export roots, nullable bundle summary
   sections, and malformed draft-loading env during health-only bootstrap
+- added the first scenario-backed `URL Shortener` draft fixture plus a bounded
+  `MockInterview / ReadinessCheck` executable unit family as the `013a`
+  unblocker, while keeping recommendation/runtime behavior scoped away from
+  `013b`
 
 ## v2.2 — implementation baseline designation
 - marked v2.2 as the implementation baseline for the first controlled implementation wave

@@ -1,0 +1,13 @@
+{
+  "package_id": "topicpkg.url-shortener",
+  "checked_at": "2026-03-21T10:00:00+00:00",
+  "schema_valid": true,
+  "errors": [],
+  "warnings": [
+    "scenario prompt remains review-required"
+  ],
+  "low_confidence_paths": [
+    "scenarios[0].prompt"
+  ],
+  "missing_required_paths": []
+}

@@ -19,7 +19,7 @@ class BackendManualReviewedLoopSmokeTest(unittest.TestCase):
         self.assertEqual(topics_response.status_code, 200)
         self.assertEqual(
             [item["topic_slug"] for item in topics_response.json()],
-            ["alpha-topic", "zeta-topic"],
+            ["alpha-topic", "url-shortener", "zeta-topic"],
         )
 
         start_response = self.client.post(

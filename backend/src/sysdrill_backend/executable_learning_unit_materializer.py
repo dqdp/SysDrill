@@ -5,7 +5,7 @@ class ExecutableLearningUnitMaterializationError(ValueError):
     pass
 
 
-_SUPPORTED_UNIT_POLICIES: dict[tuple[str, str], dict[str, Any]] = {
+_CONCEPT_RECALL_POLICIES: dict[tuple[str, str], dict[str, Any]] = {
     ("Study", "LearnNew"): {
         "effective_difficulty": "introductory",
         "allowed_hint_levels": [1, 2, 3],
@@ -73,8 +73,30 @@ _SUPPORTED_UNIT_POLICIES: dict[tuple[str, str], dict[str, Any]] = {
     },
 }
 
-_EVALUATION_BINDING_ID = "binding.concept_recall.v1"
-_PEDAGOGICAL_GOAL = "independent_concept_recall"
+_SCENARIO_READINESS_PAIR = ("MockInterview", "ReadinessCheck")
+_SCENARIO_READINESS_POLICY = {
+    "allowed_hint_levels": [1],
+    "follow_up_envelope": {
+        "max_follow_ups": 1,
+        "follow_up_style": "bounded_probe",
+    },
+    "completion_rules": {
+        "submission_kind": "manual_submit",
+        "answer_boundary": "bounded_follow_up",
+        "allows_answer_reveal": False,
+    },
+}
+
+_CONCEPT_RECALL_EVALUATION_BINDING_ID = "binding.concept_recall.v1"
+_CONCEPT_RECALL_PEDAGOGICAL_GOAL = "independent_concept_recall"
+_SCENARIO_READINESS_UNIT_FAMILY = "scenario_readiness_check"
+_SCENARIO_READINESS_PEDAGOGICAL_GOAL = "bounded_mock_readiness_check"
+_SCENARIO_BINDINGS = {
+    "scenario.url-shortener.basic": {
+        "scenario_family": "url_shortener",
+        "evaluation_binding_id": "binding.url_shortener.v1",
+    }
+}
 
 
 def _is_draft_field(payload: Any) -> bool:
@@ -100,16 +122,38 @@ def _required_non_empty_string(
     payload: dict[str, Any],
     field_name: str,
     topic_slug: str,
-    concept_index: int,
+    record_index: int,
+    record_kind: str = "concept",
 ) -> str:
     value = _unwrap_payload(payload.get(field_name))
     if isinstance(value, str) and value:
         return value
     raise ExecutableLearningUnitMaterializationError(
-        "concept field '{0}' must be a non-empty string for topic '{1}' concept index {2}".format(
+        "{0} field '{1}' must be a non-empty string for topic '{2}' {0} index {3}".format(
+            record_kind,
             field_name,
             topic_slug,
-            concept_index,
+            record_index,
+        )
+    )
+
+
+def _required_non_empty_string_list(
+    payload: dict[str, Any],
+    field_name: str,
+    topic_slug: str,
+    record_index: int,
+    record_kind: str,
+) -> list[str]:
+    values = _optional_non_empty_string_list(payload, field_name)
+    if values:
+        return values
+    raise ExecutableLearningUnitMaterializationError(
+        "{0} field '{1}' must be a non-empty string list for topic '{2}' {0} index {3}".format(
+            record_kind,
+            field_name,
+            topic_slug,
+            record_index,
         )
     )
 
@@ -149,14 +193,18 @@ def _candidate_card_types(topic_package: dict[str, Any]) -> list[str]:
     return candidate_card_types
 
 
-def _unit_policy(mode: str, session_intent: str) -> dict[str, Any]:
-    policy = _SUPPORTED_UNIT_POLICIES.get((mode, session_intent))
+def _concept_recall_policy(mode: str, session_intent: str) -> dict[str, Any]:
+    policy = _CONCEPT_RECALL_POLICIES.get((mode, session_intent))
     if policy is None:
         raise ExecutableLearningUnitMaterializationError(
             "unsupported concept_recall materialization for mode '{0}' "
             "and session_intent '{1}'".format(mode, session_intent)
         )
     return policy
+
+
+def _supported_mock_pair(mode: str, session_intent: str) -> bool:
+    return (mode, session_intent) == _SCENARIO_READINESS_PAIR
 
 
 def _ensure_terminal_punctuation(text: str) -> str:
@@ -212,12 +260,47 @@ def _build_visible_prompt(
     return _build_study_visible_prompt(concept_title)
 
 
-def materialize_executable_learning_units(
+def _snake_case_token(value: str) -> str:
+    token = []
+    for index, character in enumerate(value):
+        if character.isupper() and index > 0 and value[index - 1].islower():
+            token.append("_")
+        token.append(character.lower())
+    return "".join(token)
+
+
+def _concept_recall_unit_id(mode: str, session_intent: str, concept_id: str) -> str:
+    return "elu.concept_recall.{0}.{1}.{2}".format(
+        _snake_case_token(mode),
+        _snake_case_token(session_intent),
+        concept_id,
+    )
+
+
+def _scenario_readiness_unit_id(mode: str, session_intent: str, scenario_id: str) -> str:
+    return "elu.{0}.{1}.{2}.{3}".format(
+        _SCENARIO_READINESS_UNIT_FAMILY,
+        _snake_case_token(mode),
+        _snake_case_token(session_intent),
+        scenario_id,
+    )
+
+
+def _scenario_binding_metadata(scenario_id: str) -> dict[str, str]:
+    binding = _SCENARIO_BINDINGS.get(scenario_id)
+    if binding is None:
+        raise ExecutableLearningUnitMaterializationError(
+            "unsupported scenario binding for scenario '{0}'".format(scenario_id)
+        )
+    return binding
+
+
+def _materialize_concept_recall_units(
     catalog: dict[str, dict[str, Any]],
     mode: str,
     session_intent: str,
 ) -> list[dict[str, Any]]:
-    policy = _unit_policy(mode, session_intent)
+    policy = _concept_recall_policy(mode, session_intent)
     units = []
 
     for topic_slug in sorted(catalog):
@@ -235,26 +318,121 @@ def materialize_executable_learning_units(
             concept_title = _required_non_empty_string(concept, "title", topic_slug, concept_index)
             units.append(
                 {
-                    "id": "elu.concept_recall.{0}.{1}.{2}".format(
-                        mode.lower(),
-                        session_intent.replace("Review", "_review").replace("New", "_new").lower(),
-                        concept_id,
-                    ),
+                    "id": _concept_recall_unit_id(mode, session_intent, concept_id),
                     "source_content_ids": [concept_id],
                     "mode": mode,
                     "session_intent": session_intent,
                     "visible_prompt": _build_visible_prompt(mode, concept, concept_title),
-                    "pedagogical_goal": _PEDAGOGICAL_GOAL,
+                    "pedagogical_goal": _CONCEPT_RECALL_PEDAGOGICAL_GOAL,
                     "effective_difficulty": policy["effective_difficulty"],
                     "allowed_hint_levels": list(policy["allowed_hint_levels"]),
                     "follow_up_envelope": dict(policy["follow_up_envelope"]),
                     "completion_rules": dict(policy["completion_rules"]),
-                    "evaluation_binding_id": _EVALUATION_BINDING_ID,
+                    "evaluation_binding_id": _CONCEPT_RECALL_EVALUATION_BINDING_ID,
                 }
             )
 
     return units
 
 
+def _materialize_scenario_readiness_units(
+    catalog: dict[str, dict[str, Any]],
+    mode: str,
+    session_intent: str,
+) -> list[dict[str, Any]]:
+    units = []
+
+    for topic_slug in sorted(catalog):
+        bundle = catalog[topic_slug]
+        topic_package = bundle["topic_package"]
+        if "mini_scenario" not in _candidate_card_types(topic_package):
+            continue
+
+        scenarios = topic_package.get("canonical_content", {}).get("scenarios", [])
+        if not scenarios:
+            continue
+
+        for scenario_index, scenario in enumerate(scenarios):
+            scenario_id = _required_non_empty_string(
+                scenario,
+                "id",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            _required_non_empty_string(
+                scenario,
+                "title",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            scenario_prompt = _required_non_empty_string(
+                scenario,
+                "prompt",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            effective_difficulty = _required_non_empty_string(
+                scenario,
+                "content_difficulty_baseline",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            _required_non_empty_string_list(
+                scenario,
+                "expected_focus_areas",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            _required_non_empty_string_list(
+                scenario,
+                "canonical_axes",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            _required_non_empty_string_list(
+                scenario,
+                "canonical_follow_up_candidates",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
+            binding = _scenario_binding_metadata(scenario_id)
+            units.append(
+                {
+                    "id": _scenario_readiness_unit_id(mode, session_intent, scenario_id),
+                    "source_content_ids": [scenario_id],
+                    "mode": mode,
+                    "session_intent": session_intent,
+                    "unit_family": _SCENARIO_READINESS_UNIT_FAMILY,
+                    "scenario_family": binding["scenario_family"],
+                    "visible_prompt": scenario_prompt,
+                    "pedagogical_goal": _SCENARIO_READINESS_PEDAGOGICAL_GOAL,
+                    "effective_difficulty": effective_difficulty,
+                    "allowed_hint_levels": list(_SCENARIO_READINESS_POLICY["allowed_hint_levels"]),
+                    "follow_up_envelope": dict(_SCENARIO_READINESS_POLICY["follow_up_envelope"]),
+                    "completion_rules": dict(_SCENARIO_READINESS_POLICY["completion_rules"]),
+                    "evaluation_binding_id": binding["evaluation_binding_id"],
+                }
+            )
+
+    return units
+
+
+def materialize_executable_learning_units(
+    catalog: dict[str, dict[str, Any]],
+    mode: str,
+    session_intent: str,
+) -> list[dict[str, Any]]:
+    if _supported_mock_pair(mode, session_intent):
+        return _materialize_scenario_readiness_units(catalog, mode, session_intent)
+    return _materialize_concept_recall_units(catalog, mode, session_intent)
+
+
 def supported_materialization_pairs() -> list[tuple[str, str]]:
-    return sorted(_SUPPORTED_UNIT_POLICIES)
+    return sorted(list(_CONCEPT_RECALL_POLICIES) + [_SCENARIO_READINESS_PAIR])

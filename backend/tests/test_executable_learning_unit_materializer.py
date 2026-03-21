@@ -6,6 +6,7 @@ from sysdrill_backend.content_bundle_reader import load_topic_catalog
 from sysdrill_backend.executable_learning_unit_materializer import (
     ExecutableLearningUnitMaterializationError,
     materialize_executable_learning_units,
+    supported_materialization_pairs,
 )
 
 
@@ -160,10 +161,96 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
                 session_intent="LearnNew",
             )
 
-    def test_rejects_mock_interview_for_concept_recall_units(self):
-        with self.assertRaisesRegex(ExecutableLearningUnitMaterializationError, "MockInterview"):
+    def test_supported_materialization_pairs_adds_one_mock_readiness_pair(self):
+        self.assertEqual(
+            supported_materialization_pairs(),
+            [
+                ("MockInterview", "ReadinessCheck"),
+                ("Practice", "Reinforce"),
+                ("Practice", "Remediate"),
+                ("Study", "LearnNew"),
+                ("Study", "Reinforce"),
+                ("Study", "SpacedReview"),
+            ],
+        )
+
+    def test_materializes_seeded_mock_readiness_unit_for_url_shortener(self):
+        units = materialize_executable_learning_units(
+            self.catalog,
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        )
+
+        self.assertEqual(
+            units,
+            [
+                {
+                    "id": (
+                        "elu.scenario_readiness_check.mock_interview.readiness_check."
+                        "scenario.url-shortener.basic"
+                    ),
+                    "source_content_ids": ["scenario.url-shortener.basic"],
+                    "mode": "MockInterview",
+                    "session_intent": "ReadinessCheck",
+                    "unit_family": "scenario_readiness_check",
+                    "scenario_family": "url_shortener",
+                    "visible_prompt": (
+                        "Design a URL Shortener for a read-heavy product with high "
+                        "availability requirements."
+                    ),
+                    "pedagogical_goal": "bounded_mock_readiness_check",
+                    "effective_difficulty": "standard",
+                    "allowed_hint_levels": [1],
+                    "follow_up_envelope": {
+                        "max_follow_ups": 1,
+                        "follow_up_style": "bounded_probe",
+                    },
+                    "completion_rules": {
+                        "submission_kind": "manual_submit",
+                        "answer_boundary": "bounded_follow_up",
+                        "allows_answer_reveal": False,
+                    },
+                    "evaluation_binding_id": "binding.url_shortener.v1",
+                }
+            ],
+        )
+
+    def test_mock_materialization_skips_topics_without_scenarios(self):
+        catalog = copy.deepcopy(self.catalog)
+        catalog["url-shortener"]["topic_package"]["canonical_content"]["scenarios"] = []
+
+        units = materialize_executable_learning_units(
+            catalog,
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        )
+
+        self.assertEqual(units, [])
+
+    def test_mock_materialization_skips_topics_without_mini_scenario_candidate_type(self):
+        catalog = copy.deepcopy(self.catalog)
+        catalog["url-shortener"]["topic_package"]["learning_design_drafts"][
+            "candidate_card_types"
+        ] = ["recall"]
+
+        units = materialize_executable_learning_units(
+            catalog,
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        )
+
+        self.assertEqual(units, [])
+
+    def test_mock_materialization_fails_closed_for_malformed_scenario_record(self):
+        catalog = copy.deepcopy(self.catalog)
+        del catalog["url-shortener"]["topic_package"]["canonical_content"]["scenarios"][0]["prompt"]
+
+        with self.assertRaisesRegex(
+            ExecutableLearningUnitMaterializationError,
+            "scenario field 'prompt'",
+        ):
             materialize_executable_learning_units(
-                self.catalog,
+                catalog,
                 mode="MockInterview",
                 session_intent="ReadinessCheck",
             )

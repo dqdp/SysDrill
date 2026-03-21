@@ -56,6 +56,10 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         self.runtime = SessionRuntime(self.catalog)
         self.study_unit_id = "elu.concept_recall.study.learn_new.concept.alpha-topic"
         self.practice_unit_id = "elu.concept_recall.practice.remediate.concept.alpha-topic"
+        self.mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.url-shortener.basic"
+        )
 
     def test_manual_start_returns_awaiting_answer_and_emits_events_in_order(self):
         session = self.runtime.start_manual_session(
@@ -473,6 +477,29 @@ class SessionRuntimeServiceTest(unittest.TestCase):
                         "trade-offs you would call out."
                     ),
                     "effective_difficulty": "targeted",
+                }
+            ],
+        )
+
+    def test_list_manual_launch_options_returns_seeded_mock_readiness_item(self):
+        launch_options = self.runtime.list_manual_launch_options(
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        )
+
+        self.assertEqual(
+            launch_options,
+            [
+                {
+                    "unit_id": self.mock_unit_id,
+                    "content_id": "scenario.url-shortener.basic",
+                    "topic_slug": "url-shortener",
+                    "display_title": "Design a URL Shortener",
+                    "visible_prompt": (
+                        "Design a URL Shortener for a read-heavy product with high "
+                        "availability requirements."
+                    ),
+                    "effective_difficulty": "standard",
                 }
             ],
         )

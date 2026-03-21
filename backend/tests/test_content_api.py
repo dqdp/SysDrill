@@ -46,7 +46,10 @@ class ContentCatalogApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual([item["topic_slug"] for item in payload], ["alpha-topic", "zeta-topic"])
+        self.assertEqual(
+            [item["topic_slug"] for item in payload],
+            ["alpha-topic", "url-shortener", "zeta-topic"],
+        )
         self.assertEqual(
             set(payload[0]),
             {
@@ -62,6 +65,8 @@ class ContentCatalogApiTest(unittest.TestCase):
         self.assertEqual(payload[0]["display_title"], "Кэширование")
         self.assertEqual(payload[0]["schema_valid"], True)
         self.assertNotIn("canonical_content", payload[0])
+        self.assertEqual(payload[1]["display_title"], "Design a URL Shortener")
+        self.assertEqual(payload[1]["scenario_count"], 1)
 
     def test_get_topics_uses_display_title_fallback_rule(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -181,6 +186,31 @@ class ContentCatalogApiTest(unittest.TestCase):
         self.assertNotIn("provenance", concept)
         self.assertNotIn("raw_html_path", str(payload))
         self.assertNotIn("normalized_text_path", str(payload))
+
+    def test_get_topic_projects_seeded_url_shortener_scenario_fields(self):
+        client = TestClient(
+            create_app(content_export_root=self.export_root, allow_draft_bundles=True)
+        )
+
+        response = client.get("/content/topics/url-shortener")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["topic_slug"], "url-shortener")
+        scenario = payload["canonical_content"]["scenarios"][0]
+        self.assertEqual(scenario["id"], "scenario.url-shortener.basic")
+        self.assertEqual(scenario["title"], "Design a URL Shortener")
+        self.assertIn("read-heavy", scenario["prompt"])
+        self.assertEqual(scenario["content_difficulty_baseline"], "standard")
+        self.assertEqual(
+            scenario["expected_focus_areas"],
+            ["id_generation", "storage_choice", "read_scaling", "caching"],
+        )
+        self.assertEqual(
+            scenario["canonical_axes"],
+            ["read_write_ratio", "redirect_latency", "collision_avoidance"],
+        )
+        self.assertEqual(len(scenario["canonical_follow_up_candidates"]), 3)
 
     def test_get_topic_returns_404_for_unknown_slug(self):
         client = TestClient(
