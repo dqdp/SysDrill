@@ -178,6 +178,44 @@ class ValidatorTest(unittest.TestCase):
 
         self.assertTrue(report["schema_valid"])
 
+    def test_validate_semantic_draft_accepts_rate_limiter_style_bound_concept_ids(self):
+        scenario = _valid_scenario()
+        concepts = []
+        for concept_id in [
+            "concept.rate-limiter.algorithm-choice",
+            "concept.rate-limiter.state-placement",
+            "concept.rate-limiter.failure-handling",
+            "concept.rate-limiter.trade-offs",
+        ]:
+            concept = _minimal_concept()
+            concept["id"] = draft_field(concept_id, _provenance(confidence=0.99), False)
+            concepts.append(concept)
+        scenario["bound_concept_ids"] = draft_field(
+            [
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.trade-offs",
+            ],
+            _provenance(),
+            True,
+        )
+        draft = {
+            "draft_id": "semdraft.rate-limiter",
+            "source_document_ids": ["rate-limiter"],
+            "inferred_topic_slug": "rate-limiter",
+            "mapper_version": "0.1.0",
+            "concepts": concepts,
+            "patterns": [],
+            "scenarios": [scenario],
+            "hint_ladders": [],
+            "warnings": [],
+        }
+
+        report = validate_semantic_draft(draft)
+
+        self.assertTrue(report["schema_valid"])
+
 
 if __name__ == "__main__":
     unittest.main()

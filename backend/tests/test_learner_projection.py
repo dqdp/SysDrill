@@ -801,6 +801,67 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             ],
         )
 
+    def test_rate_limiter_mock_concept_signals_update_only_explicitly_signaled_concepts(self):
+        mock_result = rate_limiter_evaluation_result(
+            session_id="session.0037d",
+            weighted_score=0.57,
+            overall_confidence=0.73,
+            requirements_band=2,
+            decomposition_band=2,
+            storage_band=1,
+            scaling_band=2,
+            reliability_band=1,
+            tradeoff_band=2,
+            communication_band=2,
+            hint_dependency=0.0,
+        )
+        mock_result["downstream_signals"]["concept_mock_evidence"] = [
+            concept_mock_signal(
+                concept_id="concept.rate-limiter.failure-handling",
+                signal_strength=0.74,
+                signal_confidence=0.78,
+                source_criteria=["reliability_awareness"],
+                evidence_basis=["expected_cue_missing"],
+            )
+        ]
+        mock_session = reviewed_mock_session(
+            session_id="session.0037d",
+            scenario_id="scenario.rate-limiter.basic",
+            bound_concept_ids=[
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+            ],
+            event_ids=["event.0037d"],
+            evaluation_result=mock_result,
+            scenario_family="rate_limiter",
+            evaluation_binding_id="binding.rate_limiter.v1",
+        )
+
+        profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [mock_session],
+                {
+                    "session.0037d": session_events(
+                        session_id="session.0037d",
+                        content_id="scenario.rate-limiter.basic",
+                        occurred_at_values=["2026-03-20T13:15:00Z"],
+                        event_types=["evaluation_attached"],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+
+        self.assertIn(
+            "concept.rate-limiter.failure-handling",
+            profile["concept_state"],
+        )
+        self.assertNotIn(
+            "concept.rate-limiter.algorithm-choice",
+            profile["concept_state"],
+        )
+        self.assertNotIn("scenario.rate-limiter.basic", profile["concept_state"])
+
     def test_mock_readiness_remains_conservative_without_mock_or_follow_up_evidence(self):
         profile = self.projector.build_profile(
             StubRuntimeReader(
@@ -1111,6 +1172,8 @@ def reviewed_mock_session(
     bound_concept_ids: list[str],
     event_ids: list[str],
     evaluation_result: dict[str, Any],
+    scenario_family: str = "url_shortener",
+    evaluation_binding_id: str = "binding.url_shortener.v1",
 ) -> dict[str, Any]:
     return {
         "session_id": session_id,
@@ -1131,8 +1194,8 @@ def reviewed_mock_session(
             "unit_family": "scenario_readiness_check",
             "source_content_ids": [scenario_id],
             "bound_concept_ids": list(bound_concept_ids),
-            "scenario_family": "url_shortener",
-            "evaluation_binding_id": "binding.url_shortener.v1",
+            "scenario_family": scenario_family,
+            "evaluation_binding_id": evaluation_binding_id,
             "visible_prompt": "Design it.",
         },
         "event_ids": list(event_ids),
@@ -1231,6 +1294,53 @@ def url_shortener_evaluation_result(
         "binding_version_ref": "binding.url_shortener.v1",
         "evaluation_mode": "rule_only",
         "evaluator_version_ref": "rule_first.url_shortener.v1",
+    }
+
+
+def rate_limiter_evaluation_result(
+    session_id: str,
+    weighted_score: float,
+    overall_confidence: float,
+    requirements_band: int,
+    decomposition_band: int,
+    storage_band: int,
+    scaling_band: int,
+    reliability_band: int,
+    tradeoff_band: int,
+    communication_band: int,
+    hint_dependency: float,
+) -> dict[str, Any]:
+    return {
+        "evaluation_id": "evaluation.{0}".format(session_id),
+        "session_id": session_id,
+        "unit_id": "unit.{0}".format(session_id),
+        "binding_id": "binding.rate_limiter.v1",
+        "criterion_results": [
+            criterion_result("requirements_understanding", requirements_band, 0.74),
+            criterion_result("decomposition_quality", decomposition_band, 0.76),
+            criterion_result("data_and_storage_choices", storage_band, 0.78),
+            criterion_result("scaling_strategy", scaling_band, 0.76),
+            criterion_result("reliability_awareness", reliability_band, 0.72),
+            criterion_result("trade_off_articulation", tradeoff_band, 0.78),
+            criterion_result("communication_clarity", communication_band, 0.74),
+        ],
+        "gating_failures": [],
+        "weighted_score": weighted_score,
+        "overall_confidence": overall_confidence,
+        "missing_dimensions": [],
+        "review_summary": {},
+        "summary_feedback": {},
+        "downstream_signals": {
+            "hint_dependency": hint_dependency,
+            "strong_independent_performance": bool(
+                weighted_score >= 0.75 and overall_confidence >= 0.7 and hint_dependency == 0.0
+            ),
+        },
+        "rubric_version": "rubric.v1",
+        "rubric_version_ref": "rubric.v1",
+        "binding_version_ref": "binding.rate_limiter.v1",
+        "evaluation_mode": "rule_only",
+        "evaluator_version_ref": "rule_first.rate_limiter.v1",
     }
 
 

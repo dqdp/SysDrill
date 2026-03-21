@@ -92,10 +92,14 @@ _CONCEPT_RECALL_PEDAGOGICAL_GOAL = "independent_concept_recall"
 _SCENARIO_READINESS_UNIT_FAMILY = "scenario_readiness_check"
 _SCENARIO_READINESS_PEDAGOGICAL_GOAL = "bounded_mock_readiness_check"
 _SCENARIO_BINDINGS = {
+    "scenario.rate-limiter.basic": {
+        "scenario_family": "rate_limiter",
+        "evaluation_binding_id": "binding.rate_limiter.v1",
+    },
     "scenario.url-shortener.basic": {
         "scenario_family": "url_shortener",
         "evaluation_binding_id": "binding.url_shortener.v1",
-    }
+    },
 }
 
 

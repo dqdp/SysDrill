@@ -1,0 +1,380 @@
+package_id: topicpkg.rate-limiter
+topic_slug: rate-limiter
+generated_at: "2026-03-22T10:00:00+00:00"
+tool_version: "0.1.0"
+source_document_ids:
+  - rate-limiter
+canonical_content:
+  concepts:
+    - id:
+        value: concept.rate-limiter.algorithm-choice
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Algorithm choice for limiter semantics"
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.87
+        review_required: true
+      description:
+        value: "Algorithm choice defines whether the limiter behaves like a token bucket, fixed window, or another semantics with different burst behavior."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.83
+        review_required: true
+      why_it_matters:
+        value:
+          - "It determines fairness, burst tolerance, and the kind of errors the limiter introduces under load."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.76
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when the system must enforce explicit request semantics instead of generic throttling."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      tradeoffs:
+        value:
+          - "Token buckets allow bursts but are less strict than fixed windows on instantaneous fairness."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      related_concepts:
+        value:
+          - concept.rate-limiter.state-placement
+          - concept.rate-limiter.trade-offs
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.algorithm-choice.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+    - id:
+        value: concept.rate-limiter.failure-handling
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Failure handling when limiter state is unavailable"
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.87
+        review_required: true
+      description:
+        value: "The limiter needs a bounded degraded policy if its shared state is stale, unavailable, or lagging."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.83
+        review_required: true
+      why_it_matters:
+        value:
+          - "Fallback behavior decides whether the system fails open, fails closed, or protects downstream systems conservatively."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.76
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it whenever limiter correctness depends on a state store that may be delayed or unavailable."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      tradeoffs:
+        value:
+          - "Fail-open preserves availability but weakens protection; fail-closed protects the backend but may reject legitimate traffic."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      related_concepts:
+        value:
+          - concept.rate-limiter.state-placement
+          - concept.rate-limiter.trade-offs
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.failure-handling.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+    - id:
+        value: concept.rate-limiter.state-placement
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "State placement for distributed counters"
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.87
+        review_required: true
+      description:
+        value: "Limiter state can live in-process, in a shared cache, or in a distributed store depending on fairness and coordination needs."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.83
+        review_required: true
+      why_it_matters:
+        value:
+          - "State placement shapes consistency, latency, and cross-node fairness."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.76
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when the limiter must stay coherent across instances or regions."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      tradeoffs:
+        value:
+          - "Shared state improves consistency but adds coordination latency and operational dependencies."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      related_concepts:
+        value:
+          - concept.rate-limiter.algorithm-choice
+          - concept.rate-limiter.failure-handling
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.state-placement.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+    - id:
+        value: concept.rate-limiter.trade-offs
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Correctness versus latency trade-offs in rate limiting"
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.87
+        review_required: true
+      description:
+        value: "Rate limiters often trade strict fairness and correctness against latency, burst tolerance, and system availability."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.83
+        review_required: true
+      why_it_matters:
+        value:
+          - "The limiter changes both user experience and backend protection, so the trade-off posture must be explicit."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.76
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when choosing between strict enforcement, low latency, and graceful degradation."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      tradeoffs:
+        value:
+          - "Cross-node fairness usually costs latency and coordination; local fast paths may admit short bursts or slight inconsistency."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      related_concepts:
+        value:
+          - concept.rate-limiter.algorithm-choice
+          - concept.rate-limiter.state-placement
+          - concept.rate-limiter.failure-handling
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.concept.trade-offs.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.72
+        review_required: true
+  patterns: []
+  scenarios:
+    - id:
+        value: scenario.rate-limiter.basic
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Design a Rate Limiter"
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.title.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      prompt:
+        value: "Design a Rate Limiter for a multi-tenant API where strict fairness matters more than occasional burst throughput."
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.prompt.001]
+            extraction_mode: llm_assisted
+            confidence: 0.84
+        review_required: true
+      content_difficulty_baseline:
+        value: standard
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.difficulty.001]
+            extraction_mode: llm_assisted
+            confidence: 0.76
+        review_required: true
+      expected_focus_areas:
+        value:
+          - algorithm_choice
+          - state_placement
+          - failure_handling
+          - tradeoffs
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.focus.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      canonical_axes:
+        value:
+          - correctness_vs_latency
+          - state_locality
+          - degraded_behavior
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.axes.001]
+            extraction_mode: llm_assisted
+            confidence: 0.73
+        review_required: true
+      bound_concept_ids:
+        value:
+          - concept.rate-limiter.algorithm-choice
+          - concept.rate-limiter.state-placement
+          - concept.rate-limiter.failure-handling
+          - concept.rate-limiter.trade-offs
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.binding.001]
+            extraction_mode: llm_assisted
+            confidence: 0.8
+        review_required: true
+      canonical_follow_up_candidates:
+        value:
+          - "Which rate-limiting algorithm would you choose, and why?"
+          - "Where would you keep limiter state if the API is deployed across regions?"
+          - "What should happen if the limiter state store becomes stale or temporarily unavailable?"
+        provenance:
+          - document_id: rate-limiter
+            fragment_ids: [frag.rate-limiter.scenario.follow-up.001]
+            extraction_mode: llm_assisted
+            confidence: 0.71
+        review_required: true
+canonical_support:
+  hint_ladders: []
+learning_design_drafts:
+  candidate_card_types:
+    - mini_scenario
+    - recall
+review:
+  status: needs_review
+  required_actions:
+    - verify seeded rate-limiter concept pack and scenario bindings
+validation_summary:
+  schema_valid: true
+  errors: []
+  warnings:
+    - "seeded rate-limiter concepts remain review-required"

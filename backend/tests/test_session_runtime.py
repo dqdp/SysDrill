@@ -60,6 +60,10 @@ class SessionRuntimeServiceTest(unittest.TestCase):
             "elu.scenario_readiness_check.mock_interview.readiness_check."
             "scenario.url-shortener.basic"
         )
+        self.rate_limiter_mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.rate-limiter.basic"
+        )
 
     def test_manual_start_returns_awaiting_answer_and_emits_events_in_order(self):
         session = self.runtime.start_manual_session(
@@ -554,6 +558,10 @@ class SessionRuntimeServiceTest(unittest.TestCase):
             [item["content_id"] for item in launch_options],
             [
                 "concept.alpha-topic",
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
                 "concept.url-shortener.caching",
                 "concept.url-shortener.id-generation",
                 "concept.url-shortener.read-scaling",
@@ -585,6 +593,10 @@ class SessionRuntimeServiceTest(unittest.TestCase):
             [item["content_id"] for item in launch_options],
             [
                 "concept.alpha-topic",
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
                 "concept.url-shortener.caching",
                 "concept.url-shortener.id-generation",
                 "concept.url-shortener.read-scaling",
@@ -619,6 +631,23 @@ class SessionRuntimeServiceTest(unittest.TestCase):
             launch_options,
             [
                 {
+                    "unit_id": self.rate_limiter_mock_unit_id,
+                    "content_id": "scenario.rate-limiter.basic",
+                    "topic_slug": "rate-limiter",
+                    "display_title": "Design a Rate Limiter",
+                    "visible_prompt": (
+                        "Design a Rate Limiter for a multi-tenant API where strict "
+                        "fairness matters more than occasional burst throughput."
+                    ),
+                    "effective_difficulty": "standard",
+                    "bound_concept_ids": [
+                        "concept.rate-limiter.algorithm-choice",
+                        "concept.rate-limiter.state-placement",
+                        "concept.rate-limiter.failure-handling",
+                        "concept.rate-limiter.trade-offs",
+                    ],
+                },
+                {
                     "unit_id": self.mock_unit_id,
                     "content_id": "scenario.url-shortener.basic",
                     "topic_slug": "url-shortener",
@@ -634,7 +663,50 @@ class SessionRuntimeServiceTest(unittest.TestCase):
                         "concept.url-shortener.read-scaling",
                         "concept.url-shortener.caching",
                     ],
-                }
+                },
+            ],
+        )
+
+    def test_rate_limiter_mock_follow_up_submission_builds_scenario_bound_evaluation_request(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.rate_limiter_mock_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would use a shared state store and likely Redis-backed counters, "
+                "but I have not committed to one algorithm yet."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+            response_latency_ms=53000,
+        )
+
+        result = self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would keep fairness across nodes with shared state, but I have "
+                "not described degraded behavior if that state becomes stale."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+            response_latency_ms=24000,
+        )
+
+        self.assertEqual(result["session"]["state"], "evaluation_pending")
+        self.assertEqual(result["evaluation_request"]["binding_id"], "binding.rate_limiter.v1")
+        self.assertEqual(result["evaluation_request"]["unit_family"], "scenario_readiness_check")
+        self.assertEqual(result["evaluation_request"]["scenario_family"], "rate_limiter")
+        self.assertEqual(
+            result["evaluation_request"]["bound_concept_ids"],
+            [
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.trade-offs",
             ],
         )
 
@@ -643,6 +715,9 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         empty_catalog["alpha-topic"]["topic_package"]["learning_design_drafts"][
             "candidate_card_types"
         ] = []
+        empty_catalog["rate-limiter"]["topic_package"]["learning_design_drafts"][
+            "candidate_card_types"
+        ] = ["mini_scenario"]
         empty_catalog["url-shortener"]["topic_package"]["learning_design_drafts"][
             "candidate_card_types"
         ] = ["mini_scenario"]
@@ -1002,6 +1077,10 @@ class SessionRuntimeApiTest(unittest.TestCase):
             [item["content_id"] for item in payload["items"]],
             [
                 "concept.alpha-topic",
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
                 "concept.url-shortener.caching",
                 "concept.url-shortener.id-generation",
                 "concept.url-shortener.read-scaling",
@@ -1040,6 +1119,10 @@ class SessionRuntimeApiTest(unittest.TestCase):
             [item["content_id"] for item in payload["items"]],
             [
                 "concept.alpha-topic",
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
                 "concept.url-shortener.caching",
                 "concept.url-shortener.id-generation",
                 "concept.url-shortener.read-scaling",

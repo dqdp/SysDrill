@@ -17,6 +17,10 @@ _URL_SHORTENER_BINDING_ID = "binding.url_shortener.v1"
 _URL_SHORTENER_UNIT_FAMILY = "scenario_readiness_check"
 _URL_SHORTENER_EVALUATOR_VERSION_REF = "rule_first.url_shortener.v1"
 _URL_SHORTENER_BINDING_VERSION_REF = "binding.url_shortener.v1"
+_RATE_LIMITER_BINDING_ID = "binding.rate_limiter.v1"
+_RATE_LIMITER_UNIT_FAMILY = "scenario_readiness_check"
+_RATE_LIMITER_EVALUATOR_VERSION_REF = "rule_first.rate_limiter.v1"
+_RATE_LIMITER_BINDING_VERSION_REF = "binding.rate_limiter.v1"
 
 _CRITERION_ORDER = [
     "concept_explanation",
@@ -222,6 +226,144 @@ _URL_SHORTENER_ALLOWED_CONCEPT_IDS = {
     "concept.url-shortener.read-scaling",
     "concept.url-shortener.caching",
 }
+_RATE_LIMITER_CRITERION_ORDER = [
+    "requirements_understanding",
+    "decomposition_quality",
+    "data_and_storage_choices",
+    "reliability_awareness",
+    "trade_off_articulation",
+    "scaling_strategy",
+    "communication_clarity",
+]
+_RATE_LIMITER_CRITERION_METADATA: dict[str, dict[str, Any]] = {
+    "requirements_understanding": {
+        "applicability": "required",
+        "weight": 1.1,
+        "missing_aspect": "state the multi-tenant fairness requirement",
+    },
+    "decomposition_quality": {
+        "applicability": "required",
+        "weight": 1.0,
+        "missing_aspect": "separate the limiter, counter, and enforcement path",
+    },
+    "data_and_storage_choices": {
+        "applicability": "required",
+        "weight": 1.2,
+        "missing_aspect": "name the counter placement and rate-limiting semantics",
+    },
+    "reliability_awareness": {
+        "applicability": "required",
+        "weight": 1.2,
+        "missing_aspect": "explain behavior when shared state is stale or unavailable",
+    },
+    "trade_off_articulation": {
+        "applicability": "required",
+        "weight": 1.0,
+        "missing_aspect": "defend correctness versus latency trade-offs",
+    },
+    "scaling_strategy": {
+        "applicability": "secondary",
+        "weight": 0.8,
+        "missing_aspect": "describe cross-node scaling implications",
+    },
+    "communication_clarity": {
+        "applicability": "secondary",
+        "weight": 0.7,
+        "missing_aspect": "present the design in a clearer sequence",
+    },
+}
+_RATE_LIMITER_REQUIREMENT_MARKERS = [
+    "tenant",
+    "multi-tenant",
+    "api",
+    "fair",
+    "fairness",
+    "request",
+]
+_RATE_LIMITER_COMPONENT_MARKERS = [
+    "limiter",
+    "counter",
+    "bucket",
+    "window",
+    "redis",
+    "state",
+]
+_RATE_LIMITER_ALGORITHM_MARKERS = [
+    "token bucket",
+    "leaky bucket",
+    "fixed window",
+    "sliding window",
+    "bucket",
+    "window",
+]
+_RATE_LIMITER_STATE_MARKERS = [
+    "redis",
+    "counter",
+    "shared state",
+    "state store",
+    "distributed",
+    "centralized",
+    "centralised",
+    "region",
+    "regions",
+]
+_RATE_LIMITER_SCALING_MARKERS = [
+    "distributed",
+    "region",
+    "regions",
+    "node",
+    "nodes",
+    "instance",
+    "instances",
+    "throughput",
+    "scale",
+]
+_RATE_LIMITER_FAILURE_CONTEXT_MARKERS = [
+    "unavailable",
+    "stale",
+    "lagging",
+    "fallback",
+    "degraded",
+    "fail-open",
+    "fail open",
+    "fail-closed",
+    "fail closed",
+]
+_RATE_LIMITER_FAILURE_ACTION_MARKERS = [
+    "fail-open",
+    "fail open",
+    "fail-closed",
+    "fail closed",
+    "fallback",
+    "degraded",
+    "reject",
+    "allow",
+    "block",
+    "bypass",
+    "error response",
+]
+_RATE_LIMITER_FAILURE_UNCERTAINTY_MARKERS = [
+    "not decided",
+    "have not decided",
+    "not sure",
+    "have not explained",
+    "did not explain",
+]
+_RATE_LIMITER_TRADEOFF_DOMAIN_MARKERS = [
+    "fairness",
+    "latency",
+    "burst",
+    "throughput",
+    "strict",
+    "consistency",
+    "availability",
+]
+_RATE_LIMITER_ALLOWED_CONCEPT_IDS = {
+    "concept.rate-limiter.algorithm-choice",
+    "concept.rate-limiter.state-placement",
+    "concept.rate-limiter.failure-handling",
+    "concept.rate-limiter.trade-offs",
+}
 
 
 def evaluate_request(request: dict[str, Any]) -> dict[str, Any]:
@@ -230,6 +372,8 @@ def evaluate_request(request: dict[str, Any]) -> dict[str, Any]:
         return evaluate_concept_recall(request)
     if binding_id == _URL_SHORTENER_BINDING_ID:
         return evaluate_url_shortener_readiness(request)
+    if binding_id == _RATE_LIMITER_BINDING_ID:
+        return evaluate_rate_limiter_readiness(request)
     raise RuleFirstEvaluationError(
         "unsupported binding for rule-first evaluation: {0}".format(binding_id)
     )
@@ -367,6 +511,78 @@ def evaluate_url_shortener_readiness(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def evaluate_rate_limiter_readiness(request: dict[str, Any]) -> dict[str, Any]:
+    _validate_rate_limiter_request(request)
+    primary_metrics = _transcript_metrics(request["transcript_text"])
+    follow_up_metrics = _transcript_metrics(request["follow_up_transcript_text"])
+    combined_metrics = _combine_transcript_metrics(primary_metrics, follow_up_metrics)
+    criterion_results = _build_rate_limiter_criterion_results(
+        primary_metrics=primary_metrics,
+        follow_up_metrics=follow_up_metrics,
+        combined_metrics=combined_metrics,
+    )
+    missing_dimensions = [
+        criterion["criterion_id"]
+        for criterion in criterion_results
+        if criterion["applicability"] == "required" and criterion["score_band"] < 2
+    ]
+    overall_confidence = _scenario_overall_confidence(
+        request,
+        combined_metrics,
+        missing_dimensions,
+    )
+    gating_failures = _rate_limiter_gating_failures(request, combined_metrics)
+    weighted_score = _scenario_weighted_score(criterion_results, request["session_mode"])
+    downstream_signals = _rate_limiter_downstream_signals(
+        request=request,
+        criterion_results=criterion_results,
+        combined_metrics=combined_metrics,
+        weighted_score=weighted_score,
+        overall_confidence=overall_confidence,
+        gating_failures=gating_failures,
+    )
+    review_summary = _rate_limiter_review_summary(
+        criterion_results=criterion_results,
+        missing_dimensions=missing_dimensions,
+        downstream_signals=downstream_signals,
+        combined_metrics=combined_metrics,
+    )
+    evaluation_id = _deterministic_id("evaluation", request)
+    evaluation_result = {
+        "evaluation_id": evaluation_id,
+        "session_id": request["session_id"],
+        "unit_id": request["executable_unit_id"],
+        "binding_id": request["binding_id"],
+        "criterion_results": criterion_results,
+        "gating_failures": gating_failures,
+        "weighted_score": weighted_score,
+        "overall_confidence": overall_confidence,
+        "missing_dimensions": missing_dimensions,
+        "review_summary": review_summary,
+        "summary_feedback": review_summary,
+        "downstream_signals": downstream_signals,
+        "rubric_version": _RUBRIC_VERSION_REF,
+        "rubric_version_ref": _RUBRIC_VERSION_REF,
+        "binding_version_ref": _RATE_LIMITER_BINDING_VERSION_REF,
+        "evaluation_mode": "rule_only",
+        "evaluator_version_ref": _RATE_LIMITER_EVALUATOR_VERSION_REF,
+    }
+    review_report = {
+        "session_id": request["session_id"],
+        "strengths": list(review_summary["strengths"]),
+        "missed_dimensions": list(review_summary["missed_dimensions"]),
+        "reasoning_gaps": list(review_summary["shallow_areas"]),
+        "recommended_next_focus": review_summary["next_focus_suggestion"],
+        "linked_evaluation_ids": [evaluation_id],
+        "support_dependence_note": review_summary["support_dependence_note"],
+        "follow_up_handling_note": review_summary["follow_up_handling_note"],
+    }
+    return {
+        "evaluation_result": evaluation_result,
+        "review_report": review_report,
+    }
+
+
 def _validate_request(request: dict[str, Any]) -> None:
     if request.get("binding_id") != _SUPPORTED_BINDING_ID:
         raise RuleFirstEvaluationError(
@@ -403,6 +619,34 @@ def _validate_url_shortener_request(request: dict[str, Any]) -> None:
     if request.get("scenario_family") != "url_shortener":
         raise RuleFirstEvaluationError(
             "unsupported scenario_family for url-shortener evaluation: {0}".format(
+                request.get("scenario_family")
+            )
+        )
+    if not isinstance(request.get("transcript_text"), str):
+        raise RuleFirstEvaluationError("transcript_text must be a string")
+    if not isinstance(request.get("follow_up_transcript_text"), str):
+        raise RuleFirstEvaluationError("follow_up_transcript_text must be a string")
+    hint_usage_summary = request.get("hint_usage_summary")
+    if not isinstance(hint_usage_summary, dict):
+        raise RuleFirstEvaluationError("hint_usage_summary must be a mapping")
+
+
+def _validate_rate_limiter_request(request: dict[str, Any]) -> None:
+    if request.get("binding_id") != _RATE_LIMITER_BINDING_ID:
+        raise RuleFirstEvaluationError(
+            "unsupported binding for rule-first rate-limiter evaluation: {0}".format(
+                request.get("binding_id")
+            )
+        )
+    if request.get("unit_family") != _RATE_LIMITER_UNIT_FAMILY:
+        raise RuleFirstEvaluationError(
+            "unsupported unit_family for rate-limiter evaluation: {0}".format(
+                request.get("unit_family")
+            )
+        )
+    if request.get("scenario_family") != "rate_limiter":
+        raise RuleFirstEvaluationError(
+            "unsupported scenario_family for rate-limiter evaluation: {0}".format(
                 request.get("scenario_family")
             )
         )
@@ -1141,6 +1385,384 @@ def _url_shortener_review_summary(
     }
 
 
+def _build_rate_limiter_criterion_results(
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> list[dict[str, Any]]:
+    criterion_results = []
+    for criterion_id in _RATE_LIMITER_CRITERION_ORDER:
+        metadata = _RATE_LIMITER_CRITERION_METADATA[criterion_id]
+        score_band = _rate_limiter_score_band(
+            criterion_id=criterion_id,
+            primary_metrics=primary_metrics,
+            follow_up_metrics=follow_up_metrics,
+            combined_metrics=combined_metrics,
+        )
+        missing_aspects = []
+        if metadata["applicability"] == "required" and score_band < 2:
+            missing_aspects.append(metadata["missing_aspect"])
+        criterion_results.append(
+            {
+                "criterion_id": criterion_id,
+                "applicability": metadata["applicability"],
+                "score_band": score_band,
+                "weight": metadata["weight"],
+                "weight_used": metadata["weight"],
+                "observed_evidence": _rate_limiter_observed_evidence(
+                    criterion_id,
+                    primary_metrics,
+                    follow_up_metrics,
+                    combined_metrics,
+                ),
+                "missing_aspects": missing_aspects,
+                "criterion_confidence": _criterion_confidence(combined_metrics, score_band),
+            }
+        )
+    return criterion_results
+
+
+def _rate_limiter_score_band(
+    criterion_id: str,
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> int:
+    combined_text = combined_metrics["normalized_text"]
+    follow_up_text = follow_up_metrics["normalized_text"]
+    if criterion_id == "requirements_understanding":
+        requirement_cues = _marker_hits(combined_text, _RATE_LIMITER_REQUIREMENT_MARKERS)
+        return _score_from_count(requirement_cues)
+    if criterion_id == "decomposition_quality":
+        return _score_from_count(_marker_hits(combined_text, _RATE_LIMITER_COMPONENT_MARKERS))
+    if criterion_id == "data_and_storage_choices":
+        storage_cues = int(_contains_any(combined_text, _RATE_LIMITER_STATE_MARKERS))
+        algorithm_cues = int(_contains_any(combined_text, _RATE_LIMITER_ALGORITHM_MARKERS))
+        return _score_from_count(storage_cues + algorithm_cues)
+    if criterion_id == "reliability_awareness":
+        reliability_cues = int(_rate_limiter_has_explicit_failure_policy(follow_up_text)) + int(
+            _contains_any(combined_text, ["stale", "lagging", "unavailable", "fallback"])
+        )
+        return _score_from_count(reliability_cues)
+    if criterion_id == "trade_off_articulation":
+        tradeoff_score = int(_contains_any(combined_text, _TRADEOFF_MARKERS)) + int(
+            _contains_any(combined_text, _RATE_LIMITER_TRADEOFF_DOMAIN_MARKERS)
+        )
+        return _score_from_count(tradeoff_score)
+    if criterion_id == "scaling_strategy":
+        return _score_from_count(_marker_hits(combined_text, _RATE_LIMITER_SCALING_MARKERS))
+    if criterion_id == "communication_clarity":
+        if combined_metrics["char_count"] >= 180 and combined_metrics["sentence_count"] >= 3:
+            return 3
+        if combined_metrics["char_count"] >= 90 and combined_metrics["sentence_count"] >= 2:
+            return 2
+        if combined_metrics["char_count"] >= 40:
+            return 1
+        return 0
+    raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
+
+
+def _rate_limiter_observed_evidence(
+    criterion_id: str,
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> list[str]:
+    combined_text = combined_metrics["normalized_text"]
+    follow_up_text = follow_up_metrics["normalized_text"]
+    if criterion_id == "requirements_understanding":
+        return _evidence_lines(
+            [
+                (
+                    "Mentions tenant or fairness requirements.",
+                    _contains_any(combined_text, ["tenant", "fair", "fairness"]),
+                ),
+                (
+                    "Keeps request limits in scope.",
+                    _contains_any(combined_text, ["request", "rate limiter", "limiter"]),
+                ),
+            ]
+        )
+    if criterion_id == "decomposition_quality":
+        return _evidence_lines(
+            [
+                ("Names the limiter itself.", "limiter" in combined_text),
+                (
+                    "Calls out counters or shared state.",
+                    _contains_any(combined_text, ["counter", "state", "redis"]),
+                ),
+                (
+                    "Mentions an enforcement algorithm.",
+                    _contains_any(combined_text, _RATE_LIMITER_ALGORITHM_MARKERS),
+                ),
+            ]
+        )
+    if criterion_id == "data_and_storage_choices":
+        return _evidence_lines(
+            [
+                (
+                    "Names a concrete state placement.",
+                    _contains_any(combined_text, _RATE_LIMITER_STATE_MARKERS),
+                ),
+                (
+                    "Names an explicit rate-limiting algorithm.",
+                    _contains_any(combined_text, _RATE_LIMITER_ALGORITHM_MARKERS),
+                ),
+            ]
+        )
+    if criterion_id == "reliability_awareness":
+        return _evidence_lines(
+            [
+                (
+                    "Mentions stale or unavailable state handling.",
+                    _contains_any(combined_text, ["stale", "lagging", "unavailable"]),
+                ),
+                (
+                    "Provides a concrete degraded policy in the follow-up.",
+                    _rate_limiter_has_explicit_failure_policy(follow_up_text),
+                ),
+            ]
+        )
+    if criterion_id == "trade_off_articulation":
+        return _evidence_lines(
+            [
+                (
+                    "Names a domain trade-off.",
+                    _contains_any(combined_text, _TRADEOFF_MARKERS),
+                ),
+                (
+                    "Makes the fairness, latency, or burst trade-off concrete.",
+                    _contains_any(combined_text, _RATE_LIMITER_TRADEOFF_DOMAIN_MARKERS),
+                ),
+            ]
+        )
+    if criterion_id == "scaling_strategy":
+        return _evidence_lines(
+            [
+                (
+                    "Mentions cross-node or regional deployment pressure.",
+                    _contains_any(combined_text, _RATE_LIMITER_SCALING_MARKERS),
+                ),
+            ]
+        )
+    if criterion_id == "communication_clarity":
+        return _evidence_lines(
+            [
+                (
+                    "Uses multiple sentences to structure the answer.",
+                    combined_metrics["sentence_count"] >= 2,
+                ),
+                (
+                    "Provides enough detail for a bounded review.",
+                    combined_metrics["char_count"] >= 90,
+                ),
+            ]
+        )
+    raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
+
+
+def _rate_limiter_gating_failures(
+    request: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> list[str]:
+    if request.get("completion_status") != "submitted":
+        return ["evaluation_request is not in submitted state"]
+    if combined_metrics["char_count"] == 0:
+        return ["no substantive learner answer was captured"]
+    combined_text = combined_metrics["normalized_text"]
+    missing_state_anchor = not _contains_any(combined_text, _RATE_LIMITER_STATE_MARKERS)
+    missing_algorithm_anchor = not _contains_any(combined_text, _RATE_LIMITER_ALGORITHM_MARKERS)
+    missing_failure_anchor = not _rate_limiter_has_explicit_failure_policy(combined_text)
+    if missing_state_anchor and missing_algorithm_anchor and missing_failure_anchor:
+        return ["answer misses the required rate-limiter design anchors"]
+    return []
+
+
+def _rate_limiter_downstream_signals(
+    request: dict[str, Any],
+    criterion_results: list[dict[str, Any]],
+    combined_metrics: dict[str, Any],
+    weighted_score: float,
+    overall_confidence: float,
+    gating_failures: list[str],
+) -> dict[str, Any]:
+    criterion_results_by_id = {
+        criterion["criterion_id"]: criterion for criterion in criterion_results
+    }
+    score_by_criterion = {
+        criterion_id: criterion["score_band"]
+        for criterion_id, criterion in criterion_results_by_id.items()
+    }
+    hint_usage_summary = request["hint_usage_summary"]
+    hint_dependency = 0.0
+    if hint_usage_summary.get("hint_count", 0) > 0:
+        hint_dependency += 0.35
+    if hint_usage_summary.get("used_prior_hints", False):
+        hint_dependency += 0.2
+    if request.get("answer_reveal_flag", False):
+        hint_dependency += 0.35
+    concept_mock_evidence = _rate_limiter_concept_mock_evidence(
+        request=request,
+        criterion_results_by_id=criterion_results_by_id,
+        combined_metrics=combined_metrics,
+        overall_confidence=overall_confidence,
+        gating_failures=gating_failures,
+    )
+    return {
+        "requirements_gap": round(
+            max(0.0, (3 - score_by_criterion["requirements_understanding"]) / 3.0),
+            4,
+        ),
+        "decomposition_gap": round(
+            max(0.0, (3 - score_by_criterion["decomposition_quality"]) / 3.0),
+            4,
+        ),
+        "storage_gap": round(
+            max(0.0, (3 - score_by_criterion["data_and_storage_choices"]) / 3.0),
+            4,
+        ),
+        "scaling_gap": round(
+            max(0.0, (3 - score_by_criterion["scaling_strategy"]) / 3.0),
+            4,
+        ),
+        "tradeoff_gap": round(
+            max(0.0, (3 - score_by_criterion["trade_off_articulation"]) / 3.0),
+            4,
+        ),
+        "hint_dependency": round(min(1.0, hint_dependency), 4),
+        "concept_mock_evidence": concept_mock_evidence,
+        "bounded_mock_pass": bool(
+            weighted_score >= 0.65
+            and overall_confidence >= 0.65
+            and not gating_failures
+            and score_by_criterion["trade_off_articulation"] >= 2
+            and score_by_criterion["communication_clarity"] >= 2
+        ),
+    }
+
+
+def _rate_limiter_review_summary(
+    criterion_results: list[dict[str, Any]],
+    missing_dimensions: list[str],
+    downstream_signals: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    strengths = []
+    shallow_areas = []
+    for criterion in criterion_results:
+        if criterion["score_band"] >= 2:
+            strengths.append(_strength_line(criterion["criterion_id"]))
+        elif criterion["score_band"] == 1:
+            shallow_areas.append(_shallow_line(criterion["criterion_id"]))
+
+    missed_dimensions = [_dimension_label(dimension) for dimension in missing_dimensions]
+    if missed_dimensions:
+        next_focus_suggestion = (
+            "Next, structure the answer around limiter semantics, state placement, "
+            "degraded behavior, and one defended fairness trade-off."
+        )
+    else:
+        next_focus_suggestion = (
+            "Next, keep the same structure and add one more explicit degraded-mode boundary."
+        )
+
+    support_dependence_note = None
+    if downstream_signals["hint_dependency"] > 0.0:
+        support_dependence_note = (
+            "Support usage lowers confidence in fully independent mock readiness."
+        )
+
+    follow_up_handling_note = (
+        "Follow-up handling still needs a concrete degraded policy when limiter state is stale "
+        "or unavailable."
+    )
+    if _rate_limiter_has_explicit_failure_policy(combined_metrics["normalized_text"]):
+        follow_up_handling_note = (
+            "Follow-up handling stayed concrete enough to defend degraded behavior."
+        )
+
+    return {
+        "strengths": strengths,
+        "missed_dimensions": missed_dimensions,
+        "shallow_areas": shallow_areas,
+        "next_focus_suggestion": next_focus_suggestion,
+        "support_dependence_note": support_dependence_note,
+        "follow_up_handling_note": follow_up_handling_note,
+    }
+
+
+def _rate_limiter_concept_mock_evidence(
+    request: dict[str, Any],
+    criterion_results_by_id: dict[str, dict[str, Any]],
+    combined_metrics: dict[str, Any],
+    overall_confidence: float,
+    gating_failures: list[str],
+) -> list[dict[str, Any]]:
+    allowed_concept_ids = _allowed_mock_concept_ids(request, _RATE_LIMITER_ALLOWED_CONCEPT_IDS)
+    concept_signals: list[dict[str, Any]] = []
+    combined_text = combined_metrics["normalized_text"]
+
+    if combined_metrics["char_count"] < 110 or combined_metrics["sentence_count"] < 2:
+        return concept_signals
+
+    missing_algorithm_choice = not _contains_any(combined_text, _RATE_LIMITER_ALGORITHM_MARKERS)
+    missing_state_placement = not _contains_any(combined_text, _RATE_LIMITER_STATE_MARKERS)
+    missing_failure_handling = not _rate_limiter_has_explicit_failure_policy(combined_text)
+
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.rate-limiter.algorithm-choice",
+        signal_strength=0.72,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["data_and_storage_choices"],
+            overall_confidence,
+        ),
+        source_criteria=["data_and_storage_choices"],
+        evidence_basis=["expected_cue_missing"],
+        condition=missing_algorithm_choice,
+    )
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.rate-limiter.state-placement",
+        signal_strength=0.7 if not gating_failures else 0.82,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["data_and_storage_choices"],
+            overall_confidence,
+        ),
+        source_criteria=["data_and_storage_choices"],
+        evidence_basis=["explicit_gap"] if not gating_failures else ["gating_failure"],
+        condition=missing_state_placement,
+    )
+    _append_negative_mock_concept_signal(
+        concept_signals=concept_signals,
+        allowed_concept_ids=allowed_concept_ids,
+        concept_id="concept.rate-limiter.failure-handling",
+        signal_strength=0.8 if not gating_failures else 0.86,
+        signal_confidence=_concept_signal_confidence(
+            criterion_results_by_id,
+            ["reliability_awareness"],
+            overall_confidence,
+        ),
+        source_criteria=["reliability_awareness"],
+        evidence_basis=["expected_cue_missing"] if not gating_failures else ["gating_failure"],
+        condition=missing_failure_handling,
+    )
+    return concept_signals
+
+
+def _rate_limiter_has_explicit_failure_policy(text: str) -> bool:
+    has_context = _contains_any(text, _RATE_LIMITER_FAILURE_CONTEXT_MARKERS)
+    if not has_context:
+        return False
+    if _contains_any(text, _RATE_LIMITER_FAILURE_UNCERTAINTY_MARKERS):
+        return False
+    return _contains_any(text, _RATE_LIMITER_FAILURE_ACTION_MARKERS)
+
+
 def _url_shortener_concept_mock_evidence(
     request: dict[str, Any],
     criterion_results_by_id: dict[str, dict[str, Any]],
@@ -1149,7 +1771,7 @@ def _url_shortener_concept_mock_evidence(
     overall_confidence: float,
     gating_failures: list[str],
 ) -> list[dict[str, Any]]:
-    allowed_concept_ids = _allowed_mock_concept_ids(request)
+    allowed_concept_ids = _allowed_mock_concept_ids(request, _URL_SHORTENER_ALLOWED_CONCEPT_IDS)
     concept_signals: list[dict[str, Any]] = []
     combined_text = combined_metrics["normalized_text"]
     follow_up_text = follow_up_metrics["normalized_text"]
@@ -1222,16 +1844,19 @@ def _url_shortener_concept_mock_evidence(
     return concept_signals
 
 
-def _allowed_mock_concept_ids(request: dict[str, Any]) -> set[str]:
+def _allowed_mock_concept_ids(
+    request: dict[str, Any],
+    allowed_concept_pool: set[str],
+) -> set[str]:
     bound_concept_ids = request.get("bound_concept_ids")
     if not isinstance(bound_concept_ids, list) or not bound_concept_ids:
-        return set(_URL_SHORTENER_ALLOWED_CONCEPT_IDS)
+        return set(allowed_concept_pool)
     allowed = {
         concept_id
         for concept_id in bound_concept_ids
-        if isinstance(concept_id, str) and concept_id in _URL_SHORTENER_ALLOWED_CONCEPT_IDS
+        if isinstance(concept_id, str) and concept_id in allowed_concept_pool
     }
-    return allowed if allowed else set(_URL_SHORTENER_ALLOWED_CONCEPT_IDS)
+    return allowed if allowed else set(allowed_concept_pool)
 
 
 def _concept_signal_confidence(

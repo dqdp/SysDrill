@@ -186,7 +186,44 @@ Hard failure if answer misses all of the following:
 ### Expected evidence cues
 - token bucket / leaky bucket / fixed-window trade-offs;
 - centralized vs distributed counters;
+- degraded behavior when limiter state is unavailable, stale, or lagging;
 - correctness vs latency trade-offs.
+
+### Concept signal rules
+
+Allowed concept ids for concept-specific downstream signals:
+- `concept.rate-limiter.algorithm-choice`
+- `concept.rate-limiter.state-placement`
+- `concept.rate-limiter.failure-handling`
+- `concept.rate-limiter.trade-offs`
+
+Shared rules:
+- evaluator may emit `concept_mock_evidence` only for allowed concept ids and
+  only when the scenario's `bound_concept_ids` includes them
+- negative signals may be emitted from explicit gaps, relevant gating failure,
+  or explicit expected-cue absence
+- positive signals require explicit observed evidence and should remain
+  conservative from a single attempt
+- overall scenario success or failure must not be smeared across all allowed
+  concepts
+
+Concept mapping:
+- `algorithm choice or rate-limiting semantics`
+  -> `concept.rate-limiter.algorithm-choice`
+- `state placement / counting strategy`
+  -> `concept.rate-limiter.state-placement`
+- `failure handling when state store is unavailable or lagging`
+  -> `concept.rate-limiter.failure-handling`
+- `correctness vs latency trade-offs`
+  -> `concept.rate-limiter.trade-offs`
+
+Conservative interpretation notes:
+- `concept.rate-limiter.trade-offs` should move only on explicit
+  rate-limiter-specific trade-off discussion; generic communication quality or
+  vague "there are trade-offs" phrasing is not enough
+- `concept.rate-limiter.failure-handling` should move only on explicit outage,
+  lag, or degraded-mode handling, or on explicit omission tied to that cue; it
+  should not move from generic rate-limiter weakness alone
 
 ## 3. Chat System
 

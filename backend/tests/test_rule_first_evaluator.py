@@ -4,6 +4,7 @@ import unittest
 from sysdrill_backend.rule_first_evaluator import (
     RuleFirstEvaluationError,
     evaluate_concept_recall,
+    evaluate_rate_limiter_readiness,
     evaluate_url_shortener_readiness,
 )
 
@@ -62,6 +63,37 @@ class RuleFirstEvaluatorTest(unittest.TestCase):
             "answer_reveal_flag": False,
             "timing_summary": {
                 "response_latency_ms": 62000,
+            },
+            "completion_status": "submitted",
+            "strictness_profile": "strict",
+        }
+        self.rate_limiter_request = {
+            "session_id": "session.2001",
+            "session_mode": "MockInterview",
+            "session_intent": "ReadinessCheck",
+            "executable_unit_id": (
+                "elu.scenario_readiness_check.mock_interview.readiness_check."
+                "scenario.rate-limiter.basic"
+            ),
+            "unit_family": "scenario_readiness_check",
+            "scenario_family": "rate_limiter",
+            "binding_id": "binding.rate_limiter.v1",
+            "transcript_text": (
+                "I need tenant-aware request limits and I would likely use Redis-backed "
+                "counters for coordination. I have not committed to one concrete rate-"
+                "limiting algorithm yet."
+            ),
+            "follow_up_transcript_text": (
+                "If Redis is temporarily unavailable I would fail closed briefly and "
+                "return a bounded error response for strict fairness."
+            ),
+            "hint_usage_summary": {
+                "hint_count": 0,
+                "used_prior_hints": False,
+            },
+            "answer_reveal_flag": False,
+            "timing_summary": {
+                "response_latency_ms": 58000,
             },
             "completion_status": "submitted",
             "strictness_profile": "strict",
@@ -215,6 +247,99 @@ class RuleFirstEvaluatorTest(unittest.TestCase):
 
         concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
         self.assertFalse(any(signal["direction"] == "positive" for signal in concept_signals))
+
+    def test_rate_limiter_emits_negative_algorithm_signal_without_smearing(self):
+        request = copy.deepcopy(self.rate_limiter_request)
+        request["bound_concept_ids"] = [
+            "concept.rate-limiter.algorithm-choice",
+            "concept.rate-limiter.state-placement",
+            "concept.rate-limiter.failure-handling",
+            "concept.rate-limiter.trade-offs",
+        ]
+
+        result = evaluate_rate_limiter_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertEqual(
+            [
+                signal["concept_id"]
+                for signal in concept_signals
+                if signal["direction"] == "negative"
+            ],
+            ["concept.rate-limiter.algorithm-choice"],
+        )
+        self.assertEqual(
+            concept_signals[0]["source_criteria"],
+            ["data_and_storage_choices"],
+        )
+        self.assertEqual(
+            concept_signals[0]["evidence_basis"],
+            ["expected_cue_missing"],
+        )
+
+    def test_rate_limiter_emits_negative_failure_handling_signal_without_smearing(self):
+        request = copy.deepcopy(self.rate_limiter_request)
+        request["transcript_text"] = (
+            "I would use a token bucket with Redis counters shared across instances, "
+            "and the trade-off is more cross-node coordination."
+        )
+        request["follow_up_transcript_text"] = (
+            "I would keep Redis central for consistency, but I have not decided how to "
+            "behave if Redis becomes stale or unavailable."
+        )
+        request["bound_concept_ids"] = [
+            "concept.rate-limiter.algorithm-choice",
+            "concept.rate-limiter.state-placement",
+            "concept.rate-limiter.failure-handling",
+            "concept.rate-limiter.trade-offs",
+        ]
+
+        result = evaluate_rate_limiter_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertEqual(
+            [
+                signal["concept_id"]
+                for signal in concept_signals
+                if signal["direction"] == "negative"
+            ],
+            ["concept.rate-limiter.failure-handling"],
+        )
+
+    def test_rate_limiter_concept_signals_respect_bound_concept_ids(self):
+        request = copy.deepcopy(self.rate_limiter_request)
+        request["transcript_text"] = (
+            "I would use a token bucket with Redis-backed counters shared across nodes."
+        )
+        request["follow_up_transcript_text"] = (
+            "I would centralize state for fairness, but I have not decided how to behave "
+            "if Redis becomes stale or unavailable."
+        )
+        request["bound_concept_ids"] = ["concept.rate-limiter.failure-handling"]
+
+        result = evaluate_rate_limiter_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertEqual(
+            [signal["concept_id"] for signal in concept_signals],
+            ["concept.rate-limiter.failure-handling"],
+        )
+
+    def test_rate_limiter_does_not_emit_concept_signal_from_generic_low_score_alone(self):
+        request = copy.deepcopy(self.rate_limiter_request)
+        request["transcript_text"] = "A rate limiter protects services from too many requests."
+        request["follow_up_transcript_text"] = "It also needs some counters."
+        request["bound_concept_ids"] = [
+            "concept.rate-limiter.algorithm-choice",
+            "concept.rate-limiter.state-placement",
+            "concept.rate-limiter.failure-handling",
+            "concept.rate-limiter.trade-offs",
+        ]
+
+        result = evaluate_rate_limiter_readiness(request)
+
+        concept_signals = result["evaluation_result"]["downstream_signals"]["concept_mock_evidence"]
+        self.assertEqual(concept_signals, [])
 
 
 if __name__ == "__main__":

@@ -31,6 +31,10 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             [unit["id"] for unit in units],
             [
                 "elu.concept_recall.study.learn_new.concept.alpha-topic",
+                "elu.concept_recall.study.learn_new.concept.rate-limiter.algorithm-choice",
+                "elu.concept_recall.study.learn_new.concept.rate-limiter.failure-handling",
+                "elu.concept_recall.study.learn_new.concept.rate-limiter.state-placement",
+                "elu.concept_recall.study.learn_new.concept.rate-limiter.trade-offs",
                 "elu.concept_recall.study.learn_new.concept.url-shortener.caching",
                 "elu.concept_recall.study.learn_new.concept.url-shortener.id-generation",
                 "elu.concept_recall.study.learn_new.concept.url-shortener.read-scaling",
@@ -185,53 +189,106 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             session_intent="ReadinessCheck",
         )
 
-        self.assertEqual(
+        self.assertEqual(len(units), 2)
+        self.assertIn(
+            {
+                "id": (
+                    "elu.scenario_readiness_check.mock_interview.readiness_check."
+                    "scenario.url-shortener.basic"
+                ),
+                "source_content_ids": ["scenario.url-shortener.basic"],
+                "mode": "MockInterview",
+                "session_intent": "ReadinessCheck",
+                "unit_family": "scenario_readiness_check",
+                "scenario_family": "url_shortener",
+                "scenario_title": "Design a URL Shortener",
+                "visible_prompt": (
+                    "Design a URL Shortener for a read-heavy product with high "
+                    "availability requirements."
+                ),
+                "bound_concept_ids": [
+                    "concept.url-shortener.id-generation",
+                    "concept.url-shortener.storage-choice",
+                    "concept.url-shortener.read-scaling",
+                    "concept.url-shortener.caching",
+                ],
+                "canonical_follow_up_candidates": [
+                    (
+                        "How would you generate short identifiers without creating "
+                        "avoidable collisions?"
+                    ),
+                    "What would change if write traffic grew much faster than expected?",
+                    "Where would caching help, and where could it create correctness risk?",
+                ],
+                "pedagogical_goal": "bounded_mock_readiness_check",
+                "effective_difficulty": "standard",
+                "allowed_hint_levels": [1],
+                "follow_up_envelope": {
+                    "max_follow_ups": 1,
+                    "follow_up_style": "bounded_probe",
+                },
+                "completion_rules": {
+                    "submission_kind": "manual_submit",
+                    "answer_boundary": "bounded_follow_up",
+                    "allows_answer_reveal": False,
+                },
+                "evaluation_binding_id": "binding.url_shortener.v1",
+            },
             units,
-            [
-                {
-                    "id": (
-                        "elu.scenario_readiness_check.mock_interview.readiness_check."
-                        "scenario.url-shortener.basic"
+        )
+
+    def test_materializes_seeded_mock_readiness_unit_for_rate_limiter(self):
+        units = materialize_executable_learning_units(
+            self.catalog,
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        )
+
+        self.assertIn(
+            {
+                "id": (
+                    "elu.scenario_readiness_check.mock_interview.readiness_check."
+                    "scenario.rate-limiter.basic"
+                ),
+                "source_content_ids": ["scenario.rate-limiter.basic"],
+                "mode": "MockInterview",
+                "session_intent": "ReadinessCheck",
+                "unit_family": "scenario_readiness_check",
+                "scenario_family": "rate_limiter",
+                "scenario_title": "Design a Rate Limiter",
+                "visible_prompt": (
+                    "Design a Rate Limiter for a multi-tenant API where strict fairness "
+                    "matters more than occasional burst throughput."
+                ),
+                "bound_concept_ids": [
+                    "concept.rate-limiter.algorithm-choice",
+                    "concept.rate-limiter.state-placement",
+                    "concept.rate-limiter.failure-handling",
+                    "concept.rate-limiter.trade-offs",
+                ],
+                "canonical_follow_up_candidates": [
+                    "Which rate-limiting algorithm would you choose, and why?",
+                    "Where would you keep limiter state if the API is deployed across regions?",
+                    (
+                        "What should happen if the limiter state store becomes stale or "
+                        "temporarily unavailable?"
                     ),
-                    "source_content_ids": ["scenario.url-shortener.basic"],
-                    "mode": "MockInterview",
-                    "session_intent": "ReadinessCheck",
-                    "unit_family": "scenario_readiness_check",
-                    "scenario_family": "url_shortener",
-                    "scenario_title": "Design a URL Shortener",
-                    "visible_prompt": (
-                        "Design a URL Shortener for a read-heavy product with high "
-                        "availability requirements."
-                    ),
-                    "bound_concept_ids": [
-                        "concept.url-shortener.id-generation",
-                        "concept.url-shortener.storage-choice",
-                        "concept.url-shortener.read-scaling",
-                        "concept.url-shortener.caching",
-                    ],
-                    "canonical_follow_up_candidates": [
-                        (
-                            "How would you generate short identifiers without creating "
-                            "avoidable collisions?"
-                        ),
-                        "What would change if write traffic grew much faster than expected?",
-                        "Where would caching help, and where could it create correctness risk?",
-                    ],
-                    "pedagogical_goal": "bounded_mock_readiness_check",
-                    "effective_difficulty": "standard",
-                    "allowed_hint_levels": [1],
-                    "follow_up_envelope": {
-                        "max_follow_ups": 1,
-                        "follow_up_style": "bounded_probe",
-                    },
-                    "completion_rules": {
-                        "submission_kind": "manual_submit",
-                        "answer_boundary": "bounded_follow_up",
-                        "allows_answer_reveal": False,
-                    },
-                    "evaluation_binding_id": "binding.url_shortener.v1",
-                }
-            ],
+                ],
+                "pedagogical_goal": "bounded_mock_readiness_check",
+                "effective_difficulty": "standard",
+                "allowed_hint_levels": [1],
+                "follow_up_envelope": {
+                    "max_follow_ups": 1,
+                    "follow_up_style": "bounded_probe",
+                },
+                "completion_rules": {
+                    "submission_kind": "manual_submit",
+                    "answer_boundary": "bounded_follow_up",
+                    "allows_answer_reveal": False,
+                },
+                "evaluation_binding_id": "binding.rate_limiter.v1",
+            },
+            units,
         )
 
     def test_materializes_seeded_url_shortener_concept_recall_units_for_study(self):
@@ -255,9 +312,31 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             ],
         )
 
+    def test_materializes_seeded_rate_limiter_concept_recall_units_for_study(self):
+        units = materialize_executable_learning_units(
+            self.catalog,
+            mode="Study",
+            session_intent="LearnNew",
+        )
+
+        self.assertEqual(
+            [
+                unit["source_content_ids"][0]
+                for unit in units
+                if unit["source_content_ids"][0].startswith("concept.rate-limiter.")
+            ],
+            [
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
+            ],
+        )
+
     def test_mock_materialization_skips_topics_without_scenarios(self):
         catalog = copy.deepcopy(self.catalog)
         catalog["url-shortener"]["topic_package"]["canonical_content"]["scenarios"] = []
+        catalog["rate-limiter"]["topic_package"]["canonical_content"]["scenarios"] = []
 
         units = materialize_executable_learning_units(
             catalog,
@@ -270,6 +349,9 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
     def test_mock_materialization_skips_topics_without_mini_scenario_candidate_type(self):
         catalog = copy.deepcopy(self.catalog)
         catalog["url-shortener"]["topic_package"]["learning_design_drafts"][
+            "candidate_card_types"
+        ] = ["recall"]
+        catalog["rate-limiter"]["topic_package"]["learning_design_drafts"][
             "candidate_card_types"
         ] = ["recall"]
 
@@ -323,8 +405,11 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             session_intent="ReadinessCheck",
         )
 
-        self.assertEqual(len(units), 1)
-        self.assertNotIn("bound_concept_ids", units[0])
+        url_shortener_units = [
+            unit for unit in units if unit["source_content_ids"] == ["scenario.url-shortener.basic"]
+        ]
+        self.assertEqual(len(url_shortener_units), 1)
+        self.assertNotIn("bound_concept_ids", url_shortener_units[0])
 
     def test_skips_topics_without_recall_candidate_type(self):
         catalog = copy.deepcopy(self.catalog)
@@ -344,6 +429,10 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
         self.assertEqual(
             [unit["source_content_ids"][0] for unit in units],
             [
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
                 "concept.url-shortener.caching",
                 "concept.url-shortener.id-generation",
                 "concept.url-shortener.read-scaling",
@@ -365,6 +454,10 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             [unit["source_content_ids"][0] for unit in units],
             [
                 "concept.alpha-topic",
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
                 "concept.url-shortener.caching",
                 "concept.url-shortener.id-generation",
                 "concept.url-shortener.read-scaling",

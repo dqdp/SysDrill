@@ -35,6 +35,10 @@ class RecommendationEngineTest(unittest.TestCase):
             "elu.scenario_readiness_check.mock_interview.readiness_check."
             "scenario.url-shortener.basic"
         )
+        self.rate_limiter_mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.rate-limiter.basic"
+        )
 
     def test_next_recommendation_prefers_study_learn_new_when_no_reviewed_history_exists(self):
         decision = self.engine.next_recommendation(user_id="demo-user")
@@ -154,7 +158,7 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(decision["chosen_action"]["session_intent"], "LearnNew")
         self.assertEqual(
             decision["chosen_action"]["target_id"],
-            "concept.url-shortener.caching",
+            "concept.rate-limiter.algorithm-choice",
         )
         self.assertEqual(
             decision["supporting_signals"],
@@ -202,6 +206,34 @@ class RecommendationEngineTest(unittest.TestCase):
                         },
                         "concept.url-shortener.storage-choice": {
                             "proficiency_estimate": 0.85,
+                            "confidence": 0.69,
+                            "review_due_risk": 0.21,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.rate-limiter.algorithm-choice": {
+                            "proficiency_estimate": 0.84,
+                            "confidence": 0.66,
+                            "review_due_risk": 0.24,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.rate-limiter.failure-handling": {
+                            "proficiency_estimate": 0.83,
+                            "confidence": 0.67,
+                            "review_due_risk": 0.23,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.rate-limiter.state-placement": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.68,
+                            "review_due_risk": 0.22,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                        "concept.rate-limiter.trade-offs": {
+                            "proficiency_estimate": 0.81,
                             "confidence": 0.69,
                             "review_due_risk": 0.21,
                             "hint_dependency_signal": 0.0,
@@ -612,7 +644,7 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(decision["chosen_action"]["mode"], "MockInterview")
         self.assertEqual(decision["chosen_action"]["session_intent"], "ReadinessCheck")
         self.assertEqual(decision["chosen_action"]["target_type"], "scenario_family")
-        self.assertEqual(decision["chosen_action"]["target_id"], "url_shortener")
+        self.assertEqual(decision["chosen_action"]["target_id"], "rate_limiter")
         self.assertIn("readiness", decision["rationale"].lower())
 
     def test_next_recommendation_suppresses_mock_when_hint_dependency_is_too_high(self):
@@ -655,7 +687,7 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(decision["chosen_action"]["session_intent"], "LearnNew")
         self.assertEqual(
             decision["chosen_action"]["target_id"],
-            "concept.url-shortener.caching",
+            "concept.rate-limiter.algorithm-choice",
         )
 
     def test_next_recommendation_avoids_immediate_repeat_after_reviewed_mock_attempt(self):
@@ -992,6 +1024,83 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(
             decision["chosen_action"]["target_id"],
             "concept.url-shortener.storage-choice",
+        )
+        self.assertIn("recent_mock_attempt", decision["blocking_signals"])
+
+    def test_next_recommendation_targets_rate_limiter_concept_after_recent_mock_weakness(self):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.rate_limiter_mock_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would use shared counters and probably Redis, but I have not "
+                "committed to one exact algorithm."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would centralize state for fairness, but I still have not "
+                "explained degraded behavior if the state store lags."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.rate-limiter.failure-handling": {
+                            "proficiency_estimate": 0.36,
+                            "confidence": 0.57,
+                            "review_due_risk": 0.63,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                        "concept.rate-limiter.algorithm-choice": {
+                            "proficiency_estimate": 0.58,
+                            "confidence": 0.41,
+                            "review_due_risk": 0.34,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.44,
+                            "confidence": 0.39,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.05,
+                        "recent_abandonment_signal": 0.07,
+                        "mock_readiness_estimate": 0.24,
+                        "mock_readiness_confidence": 0.19,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Practice")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "Remediate")
+        self.assertEqual(
+            decision["chosen_action"]["target_id"],
+            "concept.rate-limiter.failure-handling",
         )
         self.assertIn("recent_mock_attempt", decision["blocking_signals"])
 

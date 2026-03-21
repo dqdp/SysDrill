@@ -48,7 +48,7 @@ class ContentCatalogApiTest(unittest.TestCase):
         payload = response.json()
         self.assertEqual(
             [item["topic_slug"] for item in payload],
-            ["alpha-topic", "url-shortener", "zeta-topic"],
+            ["alpha-topic", "rate-limiter", "url-shortener", "zeta-topic"],
         )
         self.assertEqual(
             set(payload[0]),
@@ -65,9 +65,12 @@ class ContentCatalogApiTest(unittest.TestCase):
         self.assertEqual(payload[0]["display_title"], "Кэширование")
         self.assertEqual(payload[0]["schema_valid"], True)
         self.assertNotIn("canonical_content", payload[0])
-        self.assertEqual(payload[1]["display_title"], "Design a URL Shortener")
+        self.assertEqual(payload[1]["display_title"], "Design a Rate Limiter")
         self.assertEqual(payload[1]["concept_count"], 4)
         self.assertEqual(payload[1]["scenario_count"], 1)
+        self.assertEqual(payload[2]["display_title"], "Design a URL Shortener")
+        self.assertEqual(payload[2]["concept_count"], 4)
+        self.assertEqual(payload[2]["scenario_count"], 1)
 
     def test_get_topics_uses_display_title_fallback_rule(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -227,6 +230,58 @@ class ContentCatalogApiTest(unittest.TestCase):
                 "concept.url-shortener.storage-choice",
                 "concept.url-shortener.read-scaling",
                 "concept.url-shortener.caching",
+            ],
+        )
+        self.assertEqual(len(scenario["canonical_follow_up_candidates"]), 3)
+
+    def test_get_topic_projects_seeded_rate_limiter_scenario_fields(self):
+        client = TestClient(
+            create_app(content_export_root=self.export_root, allow_draft_bundles=True)
+        )
+
+        response = client.get("/content/topics/rate-limiter")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["topic_slug"], "rate-limiter")
+        self.assertEqual(
+            [concept["id"] for concept in payload["canonical_content"]["concepts"]],
+            [
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.trade-offs",
+            ],
+        )
+        scenario = payload["canonical_content"]["scenarios"][0]
+        self.assertEqual(scenario["id"], "scenario.rate-limiter.basic")
+        self.assertEqual(scenario["title"], "Design a Rate Limiter")
+        self.assertIn("rate limiter", scenario["prompt"].lower())
+        self.assertEqual(scenario["content_difficulty_baseline"], "standard")
+        self.assertEqual(
+            scenario["expected_focus_areas"],
+            [
+                "algorithm_choice",
+                "state_placement",
+                "failure_handling",
+                "tradeoffs",
+            ],
+        )
+        self.assertEqual(
+            scenario["canonical_axes"],
+            [
+                "correctness_vs_latency",
+                "state_locality",
+                "degraded_behavior",
+            ],
+        )
+        self.assertEqual(
+            scenario["bound_concept_ids"],
+            [
+                "concept.rate-limiter.algorithm-choice",
+                "concept.rate-limiter.state-placement",
+                "concept.rate-limiter.failure-handling",
+                "concept.rate-limiter.trade-offs",
             ],
         )
         self.assertEqual(len(scenario["canonical_follow_up_candidates"]), 3)

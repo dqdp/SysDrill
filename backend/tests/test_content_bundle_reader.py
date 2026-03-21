@@ -20,12 +20,21 @@ class ContentBundleReaderTest(unittest.TestCase):
     def test_loads_valid_bundles_in_sorted_topic_order(self):
         catalog = load_topic_catalog(self.export_root, allow_draft_bundles=True)
 
-        self.assertEqual(list(catalog), ["alpha-topic", "url-shortener", "zeta-topic"])
+        self.assertEqual(
+            list(catalog),
+            ["alpha-topic", "rate-limiter", "url-shortener", "zeta-topic"],
+        )
         self.assertEqual(
             catalog["alpha-topic"]["topic_package"]["canonical_content"]["concepts"][0]["title"][
                 "value"
             ],
             "Кэширование",
+        )
+        self.assertEqual(
+            catalog["rate-limiter"]["topic_package"]["canonical_content"]["scenarios"][0]["id"][
+                "value"
+            ],
+            "scenario.rate-limiter.basic",
         )
         self.assertEqual(
             catalog["url-shortener"]["topic_package"]["canonical_content"]["scenarios"][0]["id"][
