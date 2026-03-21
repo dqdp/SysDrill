@@ -40,15 +40,15 @@ def _draft_field_value(payload: Any) -> Any:
 
 def _display_title_from_topic_package(topic_package: dict[str, Any]) -> str:
     canonical_content = _mapping_or_empty(topic_package.get("canonical_content"))
-    concepts = _list_or_empty(canonical_content.get("concepts"))
-    if concepts:
-        title = _draft_field_value(concepts[0].get("title"))
-        if isinstance(title, str) and title:
-            return title
-
     scenarios = _list_or_empty(canonical_content.get("scenarios"))
     if scenarios:
         title = _draft_field_value(scenarios[0].get("title"))
+        if isinstance(title, str) and title:
+            return title
+
+    concepts = _list_or_empty(canonical_content.get("concepts"))
+    if concepts:
+        title = _draft_field_value(concepts[0].get("title"))
         if isinstance(title, str) and title:
             return title
 

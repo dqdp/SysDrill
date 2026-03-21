@@ -4,7 +4,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from sysdrill_backend.app import create_app
-from sysdrill_backend.learner_summary import build_learner_summary
+from sysdrill_backend.content_bundle_reader import load_topic_catalog
+from sysdrill_backend.learner_summary import build_content_title_map, build_learner_summary
 
 
 class LearnerSummaryRuleTest(unittest.TestCase):
@@ -126,6 +127,67 @@ class LearnerSummaryRuleTest(unittest.TestCase):
         self.assertEqual(summary["weak_areas"], [])
         self.assertEqual(summary["review_due"], [])
         self.assertEqual(summary["readiness_summary"]["category"], "not_ready_yet")
+
+    def test_content_title_map_includes_seeded_url_shortener_concepts(self):
+        export_root = Path(__file__).parent / "fixtures" / "export_root"
+        catalog = load_topic_catalog(export_root, allow_draft_bundles=True)
+
+        title_map = build_content_title_map(catalog)
+
+        self.assertEqual(
+            title_map["concept.url-shortener.storage-choice"],
+            "Storage choice for short URL mappings",
+        )
+        self.assertEqual(
+            title_map["concept.url-shortener.id-generation"],
+            "ID generation for short URLs",
+        )
+
+    def test_summary_surfaces_bound_url_shortener_concepts_not_raw_scenario_ids(self):
+        export_root = Path(__file__).parent / "fixtures" / "export_root"
+        catalog = load_topic_catalog(export_root, allow_draft_bundles=True)
+        title_map = build_content_title_map(catalog)
+
+        summary = build_learner_summary(
+            {
+                "user_id": "user-1",
+                "concept_state": {
+                    "concept.url-shortener.storage-choice": {
+                        "proficiency_estimate": 0.33,
+                        "confidence": 0.62,
+                        "review_due_risk": 0.81,
+                        "hint_dependency_signal": 0.15,
+                        "last_evidence_at": "2026-03-21T10:00:00Z",
+                    }
+                },
+                "subskill_state": {
+                    "tradeoff_reasoning": {
+                        "proficiency_estimate": 0.41,
+                        "confidence": 0.58,
+                        "last_evidence_at": "2026-03-21T10:00:00Z",
+                    },
+                },
+                "trajectory_state": {
+                    "recent_fatigue_signal": 0.0,
+                    "recent_abandonment_signal": 0.0,
+                    "mock_readiness_estimate": 0.22,
+                    "mock_readiness_confidence": 0.2,
+                    "last_active_at": "2026-03-21T10:00:00Z",
+                },
+                "last_updated_at": "2026-03-21T10:00:00Z",
+            },
+            content_titles=title_map,
+        )
+
+        self.assertEqual(
+            summary["weak_areas"][0]["title"],
+            "Storage choice for short URL mappings",
+        )
+        self.assertEqual(
+            summary["review_due"][0]["title"],
+            "Storage choice for short URL mappings",
+        )
+        self.assertNotIn("scenario.url-shortener.basic", str(summary))
 
 
 class LearnerSummaryApiTest(unittest.TestCase):

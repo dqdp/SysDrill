@@ -5,7 +5,285 @@ tool_version: "0.1.0"
 source_document_ids:
   - url-shortener
 canonical_content:
-  concepts: []
+  concepts:
+    - id:
+        value: concept.url-shortener.caching
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Caching for redirect reads"
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.88
+        review_required: true
+      description:
+        value: "Caching absorbs read-heavy redirect traffic before it reaches the primary mapping store."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.81
+        review_required: true
+      why_it_matters:
+        value:
+          - "It keeps redirect latency low on the hottest read path."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when redirect traffic is read-heavy and repeated lookups dominate the load."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      tradeoffs:
+        value:
+          - "Cached mappings can become stale if write propagation or invalidation is sloppy."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      related_concepts:
+        value:
+          - concept.url-shortener.read-scaling
+          - concept.url-shortener.storage-choice
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.caching.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.73
+        review_required: true
+    - id:
+        value: concept.url-shortener.id-generation
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "ID generation for short URLs"
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.88
+        review_required: true
+      description:
+        value: "Short identifiers need predictable generation or collision control without becoming a bottleneck."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.82
+        review_required: true
+      why_it_matters:
+        value:
+          - "Identifier strategy constrains throughput, collision handling, and operability."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when the system needs compact short links with low collision risk."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      tradeoffs:
+        value:
+          - "Central counters simplify uniqueness but can create coordination hotspots."
+          - "Randomized ids reduce coordination but increase collision checks and entropy cost."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      related_concepts:
+        value:
+          - concept.url-shortener.storage-choice
+          - concept.url-shortener.read-scaling
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.id-generation.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.73
+        review_required: true
+    - id:
+        value: concept.url-shortener.read-scaling
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Read scaling for redirect traffic"
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.88
+        review_required: true
+      description:
+        value: "The redirect path needs to stay fast under skewed, read-heavy traffic."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.82
+        review_required: true
+      why_it_matters:
+        value:
+          - "Read-path scaling usually dominates user-facing latency for a URL shortener."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when redirect volume and hotspot skew would overload a single storage path."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      tradeoffs:
+        value:
+          - "Replicas and caches improve read throughput but complicate freshness and invalidation."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      related_concepts:
+        value:
+          - concept.url-shortener.caching
+          - concept.url-shortener.storage-choice
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.read-scaling.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.73
+        review_required: true
+    - id:
+        value: concept.url-shortener.storage-choice
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.id.001]
+            extraction_mode: rule
+            confidence: 0.99
+        review_required: false
+      title:
+        value: "Storage choice for short URL mappings"
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.title.001]
+            extraction_mode: llm_assisted
+            confidence: 0.88
+        review_required: true
+      description:
+        value: "The mapping store has to balance redirect latency, write path simplicity, and durability."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.description.001]
+            extraction_mode: llm_assisted
+            confidence: 0.82
+        review_required: true
+      why_it_matters:
+        value:
+          - "Storage layout shapes the read path, write amplification, and recovery posture."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.why.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      when_to_use:
+        value:
+          - "Use it when short-id to long-url lookups need predictable low-latency access."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.when.001]
+            extraction_mode: llm_assisted
+            confidence: 0.77
+        review_required: true
+      tradeoffs:
+        value:
+          - "Simple key-value storage fits lookup speed but can limit richer analytics or secondary access patterns."
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.tradeoffs.001]
+            extraction_mode: llm_assisted
+            confidence: 0.75
+        review_required: true
+      related_concepts:
+        value:
+          - concept.url-shortener.caching
+          - concept.url-shortener.id-generation
+          - concept.url-shortener.read-scaling
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.related.001]
+            extraction_mode: llm_assisted
+            confidence: 0.74
+        review_required: true
+      prerequisites:
+        value: []
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.concept.storage-choice.prereq.001]
+            extraction_mode: llm_assisted
+            confidence: 0.73
+        review_required: true
   patterns: []
   scenarios:
     - id:
@@ -63,6 +341,18 @@ canonical_content:
             extraction_mode: llm_assisted
             confidence: 0.72
         review_required: true
+      bound_concept_ids:
+        value:
+          - concept.url-shortener.id-generation
+          - concept.url-shortener.storage-choice
+          - concept.url-shortener.read-scaling
+          - concept.url-shortener.caching
+        provenance:
+          - document_id: url-shortener
+            fragment_ids: [frag.url-shortener.scenario.binding.001]
+            extraction_mode: llm_assisted
+            confidence: 0.8
+        review_required: true
       canonical_follow_up_candidates:
         value:
           - "How would you generate short identifiers without creating avoidable collisions?"
@@ -79,12 +369,13 @@ canonical_support:
 learning_design_drafts:
   candidate_card_types:
     - mini_scenario
+    - recall
 review:
   status: needs_review
   required_actions:
-    - verify scenario prompt and follow-up envelope cues
+    - verify seeded url-shortener concept pack and scenario bindings
 validation_summary:
   schema_valid: true
   errors: []
   warnings:
-    - "scenario prompt remains review-required"
+    - "seeded url-shortener concepts remain review-required"

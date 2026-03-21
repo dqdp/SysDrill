@@ -409,6 +409,13 @@ def _materialize_scenario_readiness_units(
                 scenario_index,
                 record_kind="scenario",
             )
+            bound_concept_ids = _required_non_empty_string_list(
+                scenario,
+                "bound_concept_ids",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
             binding = _scenario_binding_metadata(scenario_id)
             units.append(
                 {
@@ -420,6 +427,7 @@ def _materialize_scenario_readiness_units(
                     "scenario_family": binding["scenario_family"],
                     "scenario_title": scenario_title,
                     "visible_prompt": scenario_prompt,
+                    "bound_concept_ids": bound_concept_ids,
                     "canonical_follow_up_candidates": canonical_follow_up_candidates,
                     "pedagogical_goal": _SCENARIO_READINESS_PEDAGOGICAL_GOAL,
                     "effective_difficulty": effective_difficulty,

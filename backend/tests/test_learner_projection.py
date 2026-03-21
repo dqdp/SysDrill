@@ -367,6 +367,82 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             fresh_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
         )
 
+    def test_mock_scenario_evidence_updates_bound_concepts_more_conservatively_than_direct_recall(
+        self,
+    ):
+        bound_concept_id = "concept.url-shortener.storage-choice"
+        mock_session = reviewed_mock_session(
+            session_id="session.0036",
+            scenario_id="scenario.url-shortener.basic",
+            bound_concept_ids=[bound_concept_id],
+            event_ids=["event.0036"],
+            evaluation_result=url_shortener_evaluation_result(
+                session_id="session.0036",
+                weighted_score=0.82,
+                overall_confidence=0.8,
+                requirements_band=3,
+                decomposition_band=3,
+                storage_band=3,
+                scaling_band=2,
+                reliability_band=2,
+                tradeoff_band=3,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+        direct_session = reviewed_session(
+            session_id="session.0037",
+            mode="Study",
+            content_id=bound_concept_id,
+            event_ids=["event.0037"],
+            evaluation_result=evaluation_result(
+                session_id="session.0037",
+                weighted_score=0.82,
+                overall_confidence=0.8,
+                concept_explanation_band=3,
+                usage_judgment_band=3,
+                tradeoff_band=3,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+
+        mock_profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [mock_session],
+                {
+                    "session.0036": session_events(
+                        session_id="session.0036",
+                        content_id="scenario.url-shortener.basic",
+                        occurred_at_values=["2026-03-20T10:00:00Z"],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+        direct_profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [direct_session],
+                {
+                    "session.0037": session_events(
+                        session_id="session.0037",
+                        content_id=bound_concept_id,
+                        occurred_at_values=["2026-03-20T10:05:00Z"],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+
+        self.assertLess(
+            mock_profile["concept_state"][bound_concept_id]["proficiency_estimate"],
+            direct_profile["concept_state"][bound_concept_id]["proficiency_estimate"],
+        )
+        self.assertLess(
+            mock_profile["concept_state"][bound_concept_id]["confidence"],
+            direct_profile["concept_state"][bound_concept_id]["confidence"],
+        )
+
     def test_mock_readiness_remains_conservative_without_mock_or_follow_up_evidence(self):
         profile = self.projector.build_profile(
             StubRuntimeReader(
@@ -555,7 +631,7 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
         self.assertGreater(concept["hint_dependency_signal"], 0.0)
         self.assertGreater(concept["review_due_risk"], 0.0)
 
-    def test_projector_keeps_mock_reviewed_history_out_of_concept_state(self):
+    def test_projector_updates_bound_concepts_from_reviewed_mock_history(self):
         runtime = SessionRuntime(self.catalog)
         projector = LearnerProjector()
         session = runtime.start_manual_session(
@@ -586,7 +662,20 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
 
         profile = projector.build_profile(runtime, user_id="user-1")
 
-        self.assertEqual(profile["concept_state"], {})
+        self.assertEqual(
+            sorted(profile["concept_state"]),
+            [
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
+            ],
+        )
+        self.assertNotIn("scenario.url-shortener.basic", profile["concept_state"])
+        self.assertGreater(
+            profile["concept_state"]["concept.url-shortener.storage-choice"]["review_due_risk"],
+            0.0,
+        )
         self.assertIn("tradeoff_reasoning", profile["subskill_state"])
         self.assertIn("communication_clarity", profile["subskill_state"])
         self.assertGreater(profile["trajectory_state"]["mock_readiness_estimate"], 0.0)
@@ -670,6 +759,43 @@ def abandoned_session(
     }
 
 
+def reviewed_mock_session(
+    session_id: str,
+    scenario_id: str,
+    bound_concept_ids: list[str],
+    event_ids: list[str],
+    evaluation_result: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "session_id": session_id,
+        "user_id": "user-1",
+        "mode": "MockInterview",
+        "session_intent": "ReadinessCheck",
+        "strictness_profile": "strict",
+        "state": "review_presented",
+        "planned_unit_ids": [
+            ("elu.scenario_readiness_check.mock_interview.readiness_check.{0}".format(scenario_id))
+        ],
+        "current_unit": {
+            "id": (
+                "elu.scenario_readiness_check.mock_interview.readiness_check.{0}".format(
+                    scenario_id
+                )
+            ),
+            "unit_family": "scenario_readiness_check",
+            "source_content_ids": [scenario_id],
+            "bound_concept_ids": list(bound_concept_ids),
+            "scenario_family": "url_shortener",
+            "evaluation_binding_id": "binding.url_shortener.v1",
+            "visible_prompt": "Design it.",
+        },
+        "event_ids": list(event_ids),
+        "last_evaluation_result": copy.deepcopy(evaluation_result),
+        "last_review_report": {"linked_evaluation_ids": [evaluation_result["evaluation_id"]]},
+        "recommendation_decision_id": None,
+    }
+
+
 def evaluation_result(
     session_id: str,
     weighted_score: float,
@@ -712,6 +838,53 @@ def evaluation_result(
         "binding_version_ref": "binding.concept_recall.v1",
         "evaluation_mode": "rule_only",
         "evaluator_version_ref": "rule_first.concept_recall.v1",
+    }
+
+
+def url_shortener_evaluation_result(
+    session_id: str,
+    weighted_score: float,
+    overall_confidence: float,
+    requirements_band: int,
+    decomposition_band: int,
+    storage_band: int,
+    scaling_band: int,
+    reliability_band: int,
+    tradeoff_band: int,
+    communication_band: int,
+    hint_dependency: float,
+) -> dict[str, Any]:
+    return {
+        "evaluation_id": "evaluation.{0}".format(session_id),
+        "session_id": session_id,
+        "unit_id": "unit.{0}".format(session_id),
+        "binding_id": "binding.url_shortener.v1",
+        "criterion_results": [
+            criterion_result("requirements_understanding", requirements_band, 0.74),
+            criterion_result("decomposition_quality", decomposition_band, 0.76),
+            criterion_result("data_and_storage_choices", storage_band, 0.78),
+            criterion_result("scaling_strategy", scaling_band, 0.76),
+            criterion_result("reliability_awareness", reliability_band, 0.72),
+            criterion_result("trade_off_articulation", tradeoff_band, 0.78),
+            criterion_result("communication_clarity", communication_band, 0.74),
+        ],
+        "gating_failures": [],
+        "weighted_score": weighted_score,
+        "overall_confidence": overall_confidence,
+        "missing_dimensions": [],
+        "review_summary": {},
+        "summary_feedback": {},
+        "downstream_signals": {
+            "hint_dependency": hint_dependency,
+            "strong_independent_performance": bool(
+                weighted_score >= 0.75 and overall_confidence >= 0.7 and hint_dependency == 0.0
+            ),
+        },
+        "rubric_version": "rubric.v1",
+        "rubric_version_ref": "rubric.v1",
+        "binding_version_ref": "binding.url_shortener.v1",
+        "evaluation_mode": "rule_only",
+        "evaluator_version_ref": "rule_first.url_shortener.v1",
     }
 
 

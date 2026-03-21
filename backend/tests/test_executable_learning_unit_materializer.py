@@ -31,6 +31,10 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             [unit["id"] for unit in units],
             [
                 "elu.concept_recall.study.learn_new.concept.alpha-topic",
+                "elu.concept_recall.study.learn_new.concept.url-shortener.caching",
+                "elu.concept_recall.study.learn_new.concept.url-shortener.id-generation",
+                "elu.concept_recall.study.learn_new.concept.url-shortener.read-scaling",
+                "elu.concept_recall.study.learn_new.concept.url-shortener.storage-choice",
                 "elu.concept_recall.study.learn_new.concept.zeta-topic",
             ],
         )
@@ -199,6 +203,12 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
                         "Design a URL Shortener for a read-heavy product with high "
                         "availability requirements."
                     ),
+                    "bound_concept_ids": [
+                        "concept.url-shortener.id-generation",
+                        "concept.url-shortener.storage-choice",
+                        "concept.url-shortener.read-scaling",
+                        "concept.url-shortener.caching",
+                    ],
                     "canonical_follow_up_candidates": [
                         (
                             "How would you generate short identifiers without creating "
@@ -221,6 +231,27 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
                     },
                     "evaluation_binding_id": "binding.url_shortener.v1",
                 }
+            ],
+        )
+
+    def test_materializes_seeded_url_shortener_concept_recall_units_for_study(self):
+        units = materialize_executable_learning_units(
+            self.catalog,
+            mode="Study",
+            session_intent="LearnNew",
+        )
+
+        self.assertEqual(
+            [
+                unit["source_content_ids"][0]
+                for unit in units
+                if unit["source_content_ids"][0].startswith("concept.url-shortener.")
+            ],
+            [
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
             ],
         )
 
@@ -276,7 +307,18 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             session_intent="LearnNew",
         )
 
-        self.assertEqual(units, [])
+        self.assertFalse(
+            any(unit["source_content_ids"] == ["concept.alpha-topic"] for unit in units)
+        )
+        self.assertEqual(
+            [unit["source_content_ids"][0] for unit in units],
+            [
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
+            ],
+        )
 
     def test_skips_topics_without_concepts(self):
         catalog = copy.deepcopy(self.catalog)
@@ -288,8 +330,16 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
             session_intent="LearnNew",
         )
 
-        self.assertEqual(len(units), 1)
-        self.assertEqual(units[0]["source_content_ids"], ["concept.alpha-topic"])
+        self.assertEqual(
+            [unit["source_content_ids"][0] for unit in units],
+            [
+                "concept.alpha-topic",
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
+            ],
+        )
 
 
 if __name__ == "__main__":

@@ -58,6 +58,7 @@
 - `hidden_constraints`
 - `anti_shortcuts`
 - `reference_patterns`
+- `bound_concept_ids`
 - `references`
 
 ### Notes
@@ -65,6 +66,9 @@
   а не mode-specific strictness.
 - `canonical_follow_up_candidates` — канонически уместные направления углубления,
   а не session-specific queue вопросов.
+- `bound_concept_ids` — явная canonical привязка scenario к concept ids, которые
+  могут использоваться для conservative post-mock targeting и learner-state
+  updates. Это не runtime queue и не эвристика по `expected_focus_areas`.
 
 ## Entity: HintLadder
 

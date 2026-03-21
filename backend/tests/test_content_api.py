@@ -66,6 +66,7 @@ class ContentCatalogApiTest(unittest.TestCase):
         self.assertEqual(payload[0]["schema_valid"], True)
         self.assertNotIn("canonical_content", payload[0])
         self.assertEqual(payload[1]["display_title"], "Design a URL Shortener")
+        self.assertEqual(payload[1]["concept_count"], 4)
         self.assertEqual(payload[1]["scenario_count"], 1)
 
     def test_get_topics_uses_display_title_fallback_rule(self):
@@ -197,6 +198,15 @@ class ContentCatalogApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["topic_slug"], "url-shortener")
+        self.assertEqual(
+            [concept["id"] for concept in payload["canonical_content"]["concepts"]],
+            [
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
+            ],
+        )
         scenario = payload["canonical_content"]["scenarios"][0]
         self.assertEqual(scenario["id"], "scenario.url-shortener.basic")
         self.assertEqual(scenario["title"], "Design a URL Shortener")
@@ -209,6 +219,15 @@ class ContentCatalogApiTest(unittest.TestCase):
         self.assertEqual(
             scenario["canonical_axes"],
             ["read_write_ratio", "redirect_latency", "collision_avoidance"],
+        )
+        self.assertEqual(
+            scenario["bound_concept_ids"],
+            [
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.storage-choice",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.caching",
+            ],
         )
         self.assertEqual(len(scenario["canonical_follow_up_candidates"]), 3)
 

@@ -206,6 +206,7 @@ class RecommendationEngine:
         recent_patterns = recommendation_context["recent_accepted_patterns"]
         trajectory_state = recommendation_context["trajectory_state"]
         recent_mock_feedback = recommendation_context["recent_mock_feedback"]
+        scenario_bound_concept_ids = recommendation_context["scenario_bound_concept_ids"]
         seen_targets = set(concept_state)
 
         learn_new_targets = {
@@ -216,15 +217,35 @@ class RecommendationEngine:
                 and record["action"]["session_intent"] == "LearnNew"
             )
         }
-        filtered_records = [
-            record
-            for record in candidate_records
-            if not (
-                record["action"]["mode"] == "Practice"
-                and record["action"]["target_id"] not in seen_targets
-                and record["action"]["target_id"] in learn_new_targets
-            )
-        ]
+        unlocked_bound_targets = {
+            target_id for target_id in seen_targets if target_id in scenario_bound_concept_ids
+        }
+        if isinstance(recent_mock_feedback, dict):
+            bound_concept_ids = recent_mock_feedback.get("bound_concept_ids", [])
+            if isinstance(bound_concept_ids, list):
+                unlocked_bound_targets.update(
+                    target_id
+                    for target_id in bound_concept_ids
+                    if target_id in scenario_bound_concept_ids
+                )
+
+        filtered_records = []
+        for record in candidate_records:
+            action = record["action"]
+            target_id = action["target_id"]
+            if (
+                action["target_type"] == "concept"
+                and target_id in scenario_bound_concept_ids
+                and target_id not in unlocked_bound_targets
+            ):
+                continue
+            if (
+                action["mode"] == "Practice"
+                and target_id not in seen_targets
+                and target_id in learn_new_targets
+            ):
+                continue
+            filtered_records.append(record)
 
         blocking_signals = []
         if len(recent_patterns) >= 2 and recent_patterns[-1] == recent_patterns[-2]:
@@ -306,6 +327,46 @@ class RecommendationEngine:
                 reinforce_targets.append(target_id)
 
         if weak_targets:
+            post_mock_bound_targets: list[str] = []
+            if isinstance(recent_mock_feedback, dict):
+                bound_concept_ids = recent_mock_feedback.get("bound_concept_ids", [])
+                if isinstance(bound_concept_ids, list):
+                    post_mock_bound_targets = [
+                        target_id for target_id in weak_targets if target_id in bound_concept_ids
+                    ]
+            if post_mock_bound_targets:
+                target_id = self._first_target_by_priority(
+                    targets=post_mock_bound_targets,
+                    concept_state=concept_state,
+                    metric="proficiency_estimate",
+                    reverse=False,
+                )
+                chosen_record = self._first_matching_record(
+                    filtered_records,
+                    target_id=target_id,
+                    mode="Practice",
+                    session_intent="Remediate",
+                )
+                return self._decision_payload(
+                    candidate_records=filtered_records,
+                    chosen_record=chosen_record,
+                    supporting_signals=[
+                        "post_mock_bound_concept_follow_up",
+                        "weak_reviewed_outcome",
+                        "bounded_remediation_priority",
+                    ],
+                    blocking_signals=blocking_signals,
+                    rationale=(
+                        "Choose Practice / Remediate on '{0}' because the latest "
+                        "reviewed mock exposed this bound concept as the safest next "
+                        "post-mock follow-up."
+                    ).format(chosen_record["target_title"]),
+                    alternatives_summary=(
+                        "Another mock is suppressed for now, and this bound concept "
+                        "follow-up is ranked above generic exploration after the recent "
+                        "mock attempt."
+                    ),
+                )
             target_id = self._first_target_by_priority(
                 targets=weak_targets,
                 concept_state=concept_state,
@@ -509,6 +570,7 @@ class RecommendationEngine:
             "latest_outcomes": latest_outcomes,
             "review_due_targets": review_due_targets,
             "candidate_records": candidate_records,
+            "scenario_bound_concept_ids": self._scenario_bound_concept_ids(),
             "recent_accepted_patterns": self._recent_accepted_patterns(user_id),
             "recent_mock_feedback": self._recent_mock_feedback(user_id),
             "policy_version": "bootstrap.recommendation.v1",
@@ -618,12 +680,27 @@ class RecommendationEngine:
             return None
         return mock_records[0]
 
-    def _recent_mock_feedback(self, user_id: str) -> dict[str, str] | None:
+    def _scenario_bound_concept_ids(self) -> set[str]:
+        bound_concept_ids: set[str] = set()
+        for option in self._runtime.list_manual_launch_options(
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        ):
+            option_bound_concepts = option.get("bound_concept_ids", [])
+            if not isinstance(option_bound_concepts, list):
+                continue
+            for target_id in option_bound_concepts:
+                if isinstance(target_id, str) and target_id:
+                    bound_concept_ids.add(target_id)
+        return bound_concept_ids
+
+    def _recent_mock_feedback(self, user_id: str) -> dict[str, Any] | None:
         latest_session_id = None
         latest_session_at: tuple[int, str] | None = None
         latest_mock_session_id = None
         latest_mock_session_at: tuple[int, str] | None = None
         latest_mock_state = None
+        latest_mock_bound_concept_ids: list[str] = []
 
         for session in self._runtime.list_user_sessions(user_id):
             session_id = session.get("session_id")
@@ -654,12 +731,26 @@ class RecommendationEngine:
             latest_mock_session_at = session_sort_key
             latest_mock_session_id = session_id
             latest_mock_state = session.get("state")
+            current_unit = session.get("current_unit")
+            if isinstance(current_unit, dict):
+                bound_concept_ids = current_unit.get("bound_concept_ids", [])
+                if isinstance(bound_concept_ids, list):
+                    latest_mock_bound_concept_ids = [
+                        concept_id
+                        for concept_id in bound_concept_ids
+                        if isinstance(concept_id, str) and concept_id
+                    ]
+                else:
+                    latest_mock_bound_concept_ids = []
 
         if latest_mock_session_id is None or latest_mock_session_id != latest_session_id:
             return None
         if latest_mock_state == "abandoned":
             return {"signal": "recent_mock_abandonment"}
-        return {"signal": "recent_mock_attempt"}
+        return {
+            "signal": "recent_mock_attempt",
+            "bound_concept_ids": latest_mock_bound_concept_ids,
+        }
 
     def _next_decision_id(self) -> str:
         self._decision_counter += 1

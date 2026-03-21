@@ -254,16 +254,18 @@ class SessionRuntime:
                 content_ids = unit.get("source_content_ids", [])
                 content_id = content_ids[0] if content_ids else None
                 content_metadata = self._content_metadata_by_id.get(content_id, {})
-                launch_options.append(
-                    {
-                        "unit_id": unit["id"],
-                        "content_id": content_id,
-                        "topic_slug": content_metadata.get("topic_slug"),
-                        "display_title": content_metadata.get("display_title"),
-                        "visible_prompt": unit["visible_prompt"],
-                        "effective_difficulty": unit["effective_difficulty"],
-                    }
-                )
+                launch_option = {
+                    "unit_id": unit["id"],
+                    "content_id": content_id,
+                    "topic_slug": content_metadata.get("topic_slug"),
+                    "display_title": content_metadata.get("display_title"),
+                    "visible_prompt": unit["visible_prompt"],
+                    "effective_difficulty": unit["effective_difficulty"],
+                }
+                bound_concept_ids = unit.get("bound_concept_ids", [])
+                if isinstance(bound_concept_ids, list) and bound_concept_ids:
+                    launch_option["bound_concept_ids"] = list(bound_concept_ids)
+                launch_options.append(launch_option)
 
             return copy.deepcopy(launch_options)
 

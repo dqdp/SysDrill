@@ -542,20 +542,28 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            launch_options,
+            [item["content_id"] for item in launch_options],
             [
-                {
-                    "unit_id": "elu.concept_recall.study.learn_new.concept.alpha-topic",
-                    "content_id": "concept.alpha-topic",
-                    "topic_slug": "alpha-topic",
-                    "display_title": "Кэширование",
-                    "visible_prompt": (
-                        "Explain the concept 'Кэширование'. Cover what it is, "
-                        "when to use it, and the main trade-offs."
-                    ),
-                    "effective_difficulty": "introductory",
-                }
+                "concept.alpha-topic",
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
             ],
+        )
+        self.assertEqual(
+            launch_options[0],
+            {
+                "unit_id": "elu.concept_recall.study.learn_new.concept.alpha-topic",
+                "content_id": "concept.alpha-topic",
+                "topic_slug": "alpha-topic",
+                "display_title": "Кэширование",
+                "visible_prompt": (
+                    "Explain the concept 'Кэширование'. Cover what it is, "
+                    "when to use it, and the main trade-offs."
+                ),
+                "effective_difficulty": "introductory",
+            },
         )
 
     def test_list_manual_launch_options_returns_richer_practice_prompt_without_shape_change(self):
@@ -565,23 +573,31 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            launch_options,
+            [item["content_id"] for item in launch_options],
             [
-                {
-                    "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
-                    "content_id": "concept.alpha-topic",
-                    "topic_slug": "alpha-topic",
-                    "display_title": "Кэширование",
-                    "visible_prompt": (
-                        "You're advising a teammate on whether to use 'Кэширование' in a "
-                        "real system discussion. Context: Кэш снижает нагрузку и "
-                        "латентность. Why it matters: Снижает нагрузку на базу данных. "
-                        "Explain what it is, when you would use it, and the main "
-                        "trade-offs you would call out."
-                    ),
-                    "effective_difficulty": "targeted",
-                }
+                "concept.alpha-topic",
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
             ],
+        )
+        self.assertEqual(
+            launch_options[0],
+            {
+                "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
+                "content_id": "concept.alpha-topic",
+                "topic_slug": "alpha-topic",
+                "display_title": "Кэширование",
+                "visible_prompt": (
+                    "You're advising a teammate on whether to use 'Кэширование' in a "
+                    "real system discussion. Context: Кэш снижает нагрузку и "
+                    "латентность. Why it matters: Снижает нагрузку на базу данных. "
+                    "Explain what it is, when you would use it, and the main "
+                    "trade-offs you would call out."
+                ),
+                "effective_difficulty": "targeted",
+            },
         )
 
     def test_list_manual_launch_options_returns_seeded_mock_readiness_item(self):
@@ -603,6 +619,12 @@ class SessionRuntimeServiceTest(unittest.TestCase):
                         "availability requirements."
                     ),
                     "effective_difficulty": "standard",
+                    "bound_concept_ids": [
+                        "concept.url-shortener.id-generation",
+                        "concept.url-shortener.storage-choice",
+                        "concept.url-shortener.read-scaling",
+                        "concept.url-shortener.caching",
+                    ],
                 }
             ],
         )
@@ -612,6 +634,9 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         empty_catalog["alpha-topic"]["topic_package"]["learning_design_drafts"][
             "candidate_card_types"
         ] = []
+        empty_catalog["url-shortener"]["topic_package"]["learning_design_drafts"][
+            "candidate_card_types"
+        ] = ["mini_scenario"]
         runtime = SessionRuntime(empty_catalog)
 
         launch_options = runtime.list_manual_launch_options(
@@ -961,24 +986,31 @@ class SessionRuntimeApiTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mode"], "Study")
+        self.assertEqual(payload["session_intent"], "LearnNew")
         self.assertEqual(
-            response.json(),
+            [item["content_id"] for item in payload["items"]],
+            [
+                "concept.alpha-topic",
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
+            ],
+        )
+        self.assertEqual(
+            payload["items"][0],
             {
-                "mode": "Study",
-                "session_intent": "LearnNew",
-                "items": [
-                    {
-                        "unit_id": "elu.concept_recall.study.learn_new.concept.alpha-topic",
-                        "content_id": "concept.alpha-topic",
-                        "topic_slug": "alpha-topic",
-                        "display_title": "Кэширование",
-                        "visible_prompt": (
-                            "Explain the concept 'Кэширование'. Cover what it is, "
-                            "when to use it, and the main trade-offs."
-                        ),
-                        "effective_difficulty": "introductory",
-                    }
-                ],
+                "unit_id": "elu.concept_recall.study.learn_new.concept.alpha-topic",
+                "content_id": "concept.alpha-topic",
+                "topic_slug": "alpha-topic",
+                "display_title": "Кэширование",
+                "visible_prompt": (
+                    "Explain the concept 'Кэширование'. Cover what it is, "
+                    "when to use it, and the main trade-offs."
+                ),
+                "effective_difficulty": "introductory",
             },
         )
 
@@ -992,28 +1024,35 @@ class SessionRuntimeApiTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["mode"], "Practice")
+        self.assertEqual(payload["session_intent"], "Remediate")
         self.assertEqual(
-            response.json(),
+            [item["content_id"] for item in payload["items"]],
+            [
+                "concept.alpha-topic",
+                "concept.url-shortener.caching",
+                "concept.url-shortener.id-generation",
+                "concept.url-shortener.read-scaling",
+                "concept.url-shortener.storage-choice",
+            ],
+        )
+        self.assertEqual(
+            payload["items"][0],
             {
-                "mode": "Practice",
-                "session_intent": "Remediate",
-                "items": [
-                    {
-                        "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
-                        "content_id": "concept.alpha-topic",
-                        "topic_slug": "alpha-topic",
-                        "display_title": "Кэширование",
-                        "visible_prompt": (
-                            "You're advising a teammate on whether to use "
-                            "'Кэширование' in a real system discussion. Context: "
-                            "Кэш снижает нагрузку и латентность. Why it matters: "
-                            "Снижает нагрузку на базу данных. Explain what it is, "
-                            "when you would use it, and the main trade-offs you "
-                            "would call out."
-                        ),
-                        "effective_difficulty": "targeted",
-                    }
-                ],
+                "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
+                "content_id": "concept.alpha-topic",
+                "topic_slug": "alpha-topic",
+                "display_title": "Кэширование",
+                "visible_prompt": (
+                    "You're advising a teammate on whether to use "
+                    "'Кэширование' in a real system discussion. Context: "
+                    "Кэш снижает нагрузку и латентность. Why it matters: "
+                    "Снижает нагрузку на базу данных. Explain what it is, "
+                    "when you would use it, and the main trade-offs you "
+                    "would call out."
+                ),
+                "effective_difficulty": "targeted",
             },
         )
 

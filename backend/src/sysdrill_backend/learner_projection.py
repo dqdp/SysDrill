@@ -46,15 +46,16 @@ class LearnerProjector:
             if session.get("mode") in {"Practice", "MockInterview"}:
                 practice_or_mock_review_count += 1
 
-            content_id = _session_content_id(session)
-            if content_id is not None and session_latest_at is not None:
-                concept_evidence[content_id].append(
-                    _concept_evidence_point(
-                        session=session,
-                        evaluation_result=evaluation_result,
-                        evidence_at=session_latest_at,
+            concept_target_ids = _session_concept_targets(session)
+            if session_latest_at is not None:
+                for content_id in concept_target_ids:
+                    concept_evidence[content_id].append(
+                        _concept_evidence_point(
+                            session=session,
+                            evaluation_result=evaluation_result,
+                            evidence_at=session_latest_at,
+                        )
                     )
-                )
 
             for subskill_id, evidence_point in _subskill_evidence_points(
                 session=session,
@@ -223,6 +224,16 @@ def _concept_evidence_point(
     evaluation_result: dict[str, Any],
     evidence_at: str,
 ) -> dict[str, Any]:
+    current_unit = session.get("current_unit")
+    if (
+        isinstance(current_unit, dict)
+        and current_unit.get("unit_family") == "scenario_readiness_check"
+    ):
+        return _scenario_concept_evidence_point(
+            evaluation_result=evaluation_result,
+            evidence_at=evidence_at,
+        )
+
     criterion_results = _criterion_results_by_id(evaluation_result)
     concept_explanation = _normalized_score(criterion_results.get("concept_explanation"))
     usage_judgment = _normalized_score(criterion_results.get("usage_judgment"))
@@ -237,6 +248,35 @@ def _concept_evidence_point(
             concept_score * mode_weight * (1.0 - 0.25 * support_hint_dependency)
         ),
         "overall_confidence": _clamp(float(evaluation_result.get("overall_confidence", 0.0))),
+        "hint_dependency": support_hint_dependency,
+        "evidence_at": evidence_at,
+    }
+
+
+def _scenario_concept_evidence_point(
+    evaluation_result: dict[str, Any],
+    evidence_at: str,
+) -> dict[str, Any]:
+    criterion_results = _criterion_results_by_id(evaluation_result)
+    support_hint_dependency = _hint_dependency(evaluation_result)
+    scenario_concept_score = _weighted_normalized_criterion_score(
+        criterion_results=criterion_results,
+        criterion_weights={
+            "requirements_understanding": 0.7,
+            "data_and_storage_choices": 1.2,
+            "scaling_strategy": 1.1,
+            "trade_off_articulation": 1.0,
+        },
+    )
+
+    return {
+        "weight": 0.75,
+        "proficiency_signal": _clamp(
+            scenario_concept_score * 0.82 * (1.0 - 0.2 * support_hint_dependency)
+        ),
+        "overall_confidence": _clamp(
+            float(evaluation_result.get("overall_confidence", 0.0)) * 0.78
+        ),
         "hint_dependency": support_hint_dependency,
         "evidence_at": evidence_at,
     }
@@ -312,6 +352,22 @@ def _hint_dependency(evaluation_result: dict[str, Any]) -> float:
     return _clamp(float(value))
 
 
+def _weighted_normalized_criterion_score(
+    criterion_results: dict[str, dict[str, Any]],
+    criterion_weights: dict[str, float],
+) -> float:
+    weighted_sum = 0.0
+    total_weight = 0.0
+    for criterion_id, weight in criterion_weights.items():
+        if not isinstance(weight, (int, float)) or float(weight) <= 0.0:
+            continue
+        weighted_sum += float(weight) * _normalized_score(criterion_results.get(criterion_id))
+        total_weight += float(weight)
+    if total_weight == 0.0:
+        return 0.0
+    return _clamp(weighted_sum / total_weight)
+
+
 def _weighted_average(evidence_points: list[dict[str, Any]], field: str) -> float:
     weighted_sum = 0.0
     total_weight = 0.0
@@ -341,19 +397,26 @@ def _average_from_state(state: dict[str, dict[str, Any]], field: str) -> float:
     return _clamp(sum(values) / len(values))
 
 
-def _session_content_id(session: dict[str, Any]) -> str | None:
+def _session_concept_targets(session: dict[str, Any]) -> list[str]:
     current_unit = session.get("current_unit")
     if not isinstance(current_unit, dict):
-        return None
+        return []
     if current_unit.get("unit_family") == "scenario_readiness_check":
-        return None
+        bound_concept_ids = current_unit.get("bound_concept_ids", [])
+        if not isinstance(bound_concept_ids, list):
+            return []
+        return [
+            content_id
+            for content_id in bound_concept_ids
+            if isinstance(content_id, str) and content_id
+        ]
     source_content_ids = current_unit.get("source_content_ids", [])
     if not isinstance(source_content_ids, list) or not source_content_ids:
-        return None
+        return []
     content_id = source_content_ids[0]
     if not isinstance(content_id, str) or not content_id:
-        return None
-    return content_id
+        return []
+    return [content_id]
 
 
 def _latest_timestamp(values: Any) -> str | None:

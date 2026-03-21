@@ -31,6 +31,8 @@ Typical fields:
 - topic id
 - concepts
 - patterns
+- explicit scenario-to-concept bindings where scenario outcomes need canonical
+  concept follow-up targets
 - canonical explanation
 - why it matters
 - trade-offs
