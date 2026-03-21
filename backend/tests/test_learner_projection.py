@@ -323,6 +323,50 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             profile["concept_state"]["concept.beta-topic"]["review_due_risk"],
         )
 
+    def test_review_due_risk_grows_with_wall_clock_inactivity(self):
+        session = reviewed_session(
+            session_id="session.0035",
+            mode="Study",
+            content_id="concept.alpha-topic",
+            event_ids=["event.0035"],
+            evaluation_result=evaluation_result(
+                session_id="session.0035",
+                weighted_score=0.82,
+                overall_confidence=0.8,
+                concept_explanation_band=3,
+                usage_judgment_band=2,
+                tradeoff_band=2,
+                communication_band=2,
+                hint_dependency=0.0,
+            ),
+        )
+        runtime = StubRuntimeReader(
+            [session],
+            {
+                "session.0035": session_events(
+                    session_id="session.0035",
+                    content_id="concept.alpha-topic",
+                    occurred_at_values=["2026-03-01T10:00:00Z"],
+                ),
+            },
+        )
+
+        fresh_profile = self.projector.build_profile(
+            runtime,
+            user_id="user-1",
+            now="2026-03-01T10:00:00Z",
+        )
+        stale_profile = self.projector.build_profile(
+            runtime,
+            user_id="user-1",
+            now="2026-03-21T10:00:00Z",
+        )
+
+        self.assertGreater(
+            stale_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
+            fresh_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
+        )
+
     def test_mock_readiness_remains_conservative_without_mock_or_follow_up_evidence(self):
         profile = self.projector.build_profile(
             StubRuntimeReader(

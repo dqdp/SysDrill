@@ -6,7 +6,12 @@ from typing import Any
 
 
 class LearnerProjector:
-    def build_profile(self, runtime_reader: Any, user_id: str) -> dict[str, Any]:
+    def build_profile(
+        self,
+        runtime_reader: Any,
+        user_id: str,
+        now: Any | None = None,
+    ) -> dict[str, Any]:
         # Rebuild-on-read keeps projection deterministic while history is still process-local.
         sessions = runtime_reader.list_user_sessions(user_id)
         concept_evidence: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -58,7 +63,8 @@ class LearnerProjector:
             ).items():
                 subskill_evidence[subskill_id].append(evidence_point)
 
-        concept_state = _build_concept_state(concept_evidence, latest_activity_at)
+        reference_now_at = _later_timestamp(latest_activity_at, _normalize_reference_time(now))
+        concept_state = _build_concept_state(concept_evidence, reference_now_at)
         subskill_state = _build_subskill_state(subskill_evidence)
         trajectory_state = _build_trajectory_state(
             concept_state=concept_state,
@@ -82,7 +88,7 @@ class LearnerProjector:
 
 def _build_concept_state(
     concept_evidence: dict[str, list[dict[str, Any]]],
-    latest_activity_at: str | None,
+    reference_now_at: str | None,
 ) -> dict[str, dict[str, Any]]:
     concept_state: dict[str, dict[str, Any]] = {}
     for content_id in sorted(concept_evidence):
@@ -93,13 +99,12 @@ def _build_concept_state(
         overall_confidence = _weighted_average(evidence_points, "overall_confidence")
         count_factor = min(1.0, len(evidence_points) / 3.0)
         confidence = _clamp(
-            0.05
-            + 0.35 * overall_confidence * (1.0 - hint_dependency_signal)
-            + 0.25 * count_factor
+            0.05 + 0.35 * overall_confidence * (1.0 - hint_dependency_signal) + 0.25 * count_factor
         )
+        last_evidence_at = _latest_timestamp(point["evidence_at"] for point in evidence_points)
         recency_factor = _recency_factor(
-            latest_activity_at=latest_activity_at,
-            evidence_at=_latest_timestamp(point["evidence_at"] for point in evidence_points),
+            reference_now_at=reference_now_at,
+            evidence_at=last_evidence_at,
         )
         review_due_risk = _clamp(
             0.45 * (1.0 - proficiency_estimate)
@@ -107,7 +112,6 @@ def _build_concept_state(
             + 0.2 * recency_factor
             + 0.1 * (1.0 - confidence)
         )
-        last_evidence_at = _latest_timestamp(point["evidence_at"] for point in evidence_points)
 
         concept_state[content_id] = {
             "proficiency_estimate": _round_metric(proficiency_estimate),
@@ -184,7 +188,8 @@ def _build_trajectory_state(
         practice_factor = min(1.0, practice_or_mock_review_count / reviewed_session_count)
     recent_abandonment_signal = _clamp(0.7 * abandonment_factor)
     recent_fatigue_signal = _clamp(
-        0.55 * abandonment_factor + 0.1 * (1.0 - completion_factor if total_session_count > 0 else 0.0)
+        0.55 * abandonment_factor
+        + 0.1 * (1.0 - completion_factor if total_session_count > 0 else 0.0)
     )
 
     mock_readiness_estimate = _clamp(
@@ -222,10 +227,7 @@ def _concept_evidence_point(
     concept_explanation = _normalized_score(criterion_results.get("concept_explanation"))
     usage_judgment = _normalized_score(criterion_results.get("usage_judgment"))
     support_hint_dependency = _hint_dependency(evaluation_result)
-    concept_score = (
-        (1.3 * concept_explanation + 1.1 * usage_judgment)
-        / (1.3 + 1.1)
-    )
+    concept_score = (1.3 * concept_explanation + 1.1 * usage_judgment) / (1.3 + 1.1)
     mode = session.get("mode")
     mode_weight = 1.0 if mode == "Study" else 0.97 if mode == "Practice" else 0.94
 
@@ -264,9 +266,7 @@ def _subskill_evidence_points(
         evidence_points[subskill_id] = {
             "weight": 1.0,
             "proficiency_signal": _clamp(
-                _normalized_score(criterion_result)
-                * mode_weight
-                * (1.0 - 0.2 * hint_dependency)
+                _normalized_score(criterion_result) * mode_weight * (1.0 - 0.2 * hint_dependency)
             ),
             "criterion_confidence": _clamp(
                 float(criterion_result.get("criterion_confidence", 0.0))
@@ -384,14 +384,14 @@ def _parse_timestamp(value: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _recency_factor(latest_activity_at: str | None, evidence_at: str | None) -> float:
-    if latest_activity_at is None or evidence_at is None:
+def _recency_factor(reference_now_at: str | None, evidence_at: str | None) -> float:
+    if reference_now_at is None or evidence_at is None:
         return 0.0
-    latest_activity = _parse_timestamp(latest_activity_at)
+    reference_now = _parse_timestamp(reference_now_at)
     evidence_time = _parse_timestamp(evidence_at)
-    if latest_activity is None or evidence_time is None or latest_activity <= evidence_time:
+    if reference_now is None or evidence_time is None or reference_now <= evidence_time:
         return 0.0
-    age_seconds = (latest_activity - evidence_time).total_seconds()
+    age_seconds = (reference_now - evidence_time).total_seconds()
     return _clamp(age_seconds / (7 * 24 * 60 * 60))
 
 
@@ -401,3 +401,17 @@ def _clamp(value: float) -> float:
 
 def _round_metric(value: float) -> float:
     return round(_clamp(value), 4)
+
+
+def _normalize_reference_time(value: Any | None) -> str:
+    if value is None:
+        return datetime.now(timezone.utc).isoformat()
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, str):
+        parsed = _parse_timestamp(value)
+        if parsed is not None:
+            return parsed.isoformat()
+    raise ValueError("now must be an ISO-8601 timestamp string or datetime")

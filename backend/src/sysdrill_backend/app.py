@@ -17,6 +17,7 @@ from sysdrill_backend.learner_summary import (
 )
 from sysdrill_backend.recommendation_engine import (
     NoRecommendationCandidatesError,
+    RecommendationDecisionLifecycleError,
     RecommendationDecisionNotFoundError,
     RecommendationEngine,
 )
@@ -206,14 +207,18 @@ def create_app(
             )
 
         try:
-            session = runtime.start_session_from_recommendation(
-                user_id=request.user_id,
-                decision_id=request.decision_id,
-                action=action,
-                source=request.source,
+            session = recommendation_engine.accept_session(
+                request.decision_id,
+                session_starter=lambda: runtime.start_session_from_recommendation(
+                    user_id=request.user_id,
+                    decision_id=request.decision_id,
+                    action=action,
+                    source=request.source,
+                ),
             )
-            recommendation_engine.mark_accepted(request.decision_id, session["session_id"])
             return session
+        except RecommendationDecisionLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except UnitNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except UnitModeIntentMismatchError as exc:
@@ -285,6 +290,8 @@ def create_app(
                 if isinstance(decision_id, str) and decision_id:
                     recommendation_engine.mark_completed(decision_id, session_id)
             return session
+        except RecommendationDecisionLifecycleError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SessionRuntimeInvalidStateError as exc:

@@ -20,8 +20,8 @@ Keep the following stable across deterministic and future model-assisted version
 - learner concept state summary
 - learner subskill state summary
 - learner trajectory state summary
-- recent recommendation history
-- recent session outcomes
+- recent recommendation history ordered by actual acceptance time
+- recent session outcomes ordered by actual review/evaluation time
 - review due items
 - available action templates
 - policy constraints

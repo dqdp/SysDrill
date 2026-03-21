@@ -491,6 +491,46 @@ class SessionRuntimeServiceTest(unittest.TestCase):
 
         self.assertEqual(launch_options, [])
 
+    def test_list_user_reviewed_outcomes_orders_by_review_timestamp(self):
+        first_session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        second_session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+
+        self.runtime.submit_answer(
+            session_id=second_session["session_id"],
+            transcript=(
+                "Caching is storing frequently accessed data in a faster layer. "
+                "Use it for read-heavy paths. The trade-offs are stale data "
+                "and invalidation complexity."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(second_session["session_id"])
+        self.runtime.submit_answer(
+            session_id=first_session["session_id"],
+            transcript="Caching is keeping data somewhere faster.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(first_session["session_id"])
+
+        outcomes = self.runtime.list_user_reviewed_outcomes("user-1")
+
+        self.assertEqual(
+            [outcome["session_id"] for outcome in outcomes],
+            [second_session["session_id"], first_session["session_id"]],
+        )
+
     def test_list_manual_launch_options_rejects_unsupported_mode_intent_combination(self):
         with self.assertRaisesRegex(UnitModeIntentMismatchError, "unsupported runtime"):
             self.runtime.list_manual_launch_options(
@@ -938,6 +978,33 @@ class SessionRuntimeApiTest(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    def test_start_from_recommendation_endpoint_returns_409_for_reused_decision(self):
+        recommendation_response = self.client.post(
+            "/recommendations/next",
+            json={"user_id": "demo-user"},
+        )
+        decision = recommendation_response.json()
+
+        first_response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": decision["decision_id"],
+                "action": decision["chosen_action"],
+            },
+        )
+        second_response = self.client.post(
+            "/runtime/sessions/start-from-recommendation",
+            json={
+                "user_id": "demo-user",
+                "decision_id": decision["decision_id"],
+                "action": decision["chosen_action"],
+            },
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 409)
 
     def test_recommendations_next_endpoint_returns_503_without_runtime_content(self):
         client = TestClient(create_app())

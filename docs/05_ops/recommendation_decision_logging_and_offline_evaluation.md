@@ -31,6 +31,11 @@ Later outcome linkage should capture at least:
 - whether the resulting session was abandoned
 - summary of evaluation quality from the resulting action
 
+For the v2.2 implementation baseline, a `decision_id` should link to at most
+one accepted session. Repeated launches should mint a new recommendation
+decision rather than overwriting the acceptance/completion linkage of an older
+decision record.
+
 ## Offline evaluation goals
 
 The logged data should allow later analysis of:

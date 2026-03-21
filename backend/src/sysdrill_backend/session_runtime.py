@@ -278,6 +278,10 @@ class SessionRuntime:
                 content_id = content_ids[0] if content_ids else None
                 if not isinstance(content_id, str) or not content_id:
                     continue
+                reviewed_at = self._latest_session_event_timestamp(
+                    session["session_id"],
+                    event_types={"review_presented", "evaluation_attached"},
+                )
                 outcomes.append(
                     {
                         "session_id": session["session_id"],
@@ -287,10 +291,16 @@ class SessionRuntime:
                         "weighted_score": evaluation_result["weighted_score"],
                         "missing_dimensions": list(evaluation_result.get("missing_dimensions", [])),
                         "recommendation_decision_id": session.get("recommendation_decision_id"),
+                        "reviewed_at": reviewed_at,
                     }
                 )
 
-            outcomes.sort(key=lambda outcome: outcome["session_id"])
+            outcomes.sort(
+                key=lambda outcome: (
+                    self._timestamp_sort_key(outcome.get("reviewed_at")),
+                    outcome["session_id"],
+                )
+            )
             return copy.deepcopy(outcomes)
 
     def request_hint(
@@ -308,10 +318,12 @@ class SessionRuntime:
 
             allowed_hint_levels = self._allowed_hint_levels(session)
             if hint_level is None:
-                hint_level = allowed_hint_levels[min(
-                    session["hint_count_for_unit"],
-                    len(allowed_hint_levels) - 1,
-                )]
+                hint_level = allowed_hint_levels[
+                    min(
+                        session["hint_count_for_unit"],
+                        len(allowed_hint_levels) - 1,
+                    )
+                ]
             if hint_level not in allowed_hint_levels:
                 raise SessionRuntimeError(
                     "hint_level '{0}' is not allowed for the current unit".format(hint_level)
@@ -737,9 +749,7 @@ class SessionRuntime:
         if not isinstance(allowed_hint_levels, list):
             raise SessionRuntimeError("current unit allowed_hint_levels are missing")
         normalized_levels = [
-            int(level)
-            for level in allowed_hint_levels
-            if isinstance(level, int) and level > 0
+            int(level) for level in allowed_hint_levels if isinstance(level, int) and level > 0
         ]
         if not normalized_levels:
             raise SessionRuntimeError("current unit allowed_hint_levels are invalid")
@@ -787,6 +797,35 @@ class SessionRuntime:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc)
+
+    def _latest_session_event_timestamp(
+        self,
+        session_id: str,
+        event_types: set[str],
+    ) -> str | None:
+        latest_at: datetime | None = None
+        latest_raw: str | None = None
+        for event in self._events:
+            if event["session_id"] != session_id or event["event_type"] not in event_types:
+                continue
+            occurred_at = event.get("occurred_at")
+            if not isinstance(occurred_at, str) or not occurred_at:
+                continue
+            parsed = self._parse_utc_iso(occurred_at)
+            if parsed is None:
+                continue
+            if latest_at is None or parsed > latest_at:
+                latest_at = parsed
+                latest_raw = occurred_at
+        return latest_raw
+
+    def _timestamp_sort_key(self, value: Any) -> tuple[int, str]:
+        if not isinstance(value, str) or not value:
+            return (1, "")
+        parsed = self._parse_utc_iso(value)
+        if parsed is None:
+            return (1, "")
+        return (0, parsed.isoformat())
 
     def _build_content_metadata_by_id(
         self,

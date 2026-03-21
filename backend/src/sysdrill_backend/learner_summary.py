@@ -89,7 +89,8 @@ def _weak_areas(
                         "title": content_titles.get(target_id, target_id),
                         "posture": "fragile",
                         "summary": (
-                            "Recent success looks fragile enough that this concept still needs attention."
+                            "Recent success looks fragile enough that this concept "
+                            "still needs attention."
                         ),
                     },
                 )
@@ -108,7 +109,9 @@ def _weak_areas(
                     "target_id": subskill_id,
                     "title": _SUBSKILL_TITLES.get(subskill_id, subskill_id),
                     "posture": "weak",
-                    "summary": "This supported subskill is still weak enough to justify more guided work.",
+                    "summary": (
+                        "This supported subskill is still weak enough to justify more guided work."
+                    ),
                 },
             )
         )
@@ -152,24 +155,32 @@ def _readiness_summary(trajectory_state: dict[str, Any]) -> dict[str, str]:
         return {
             "category": "stabilize_first",
             "title": "Stabilize session completion before a mock",
-            "detail": "Recent unfinished work is high enough that a lower-pressure step is safer first.",
+            "detail": (
+                "Recent unfinished work is high enough that a lower-pressure step is safer first."
+            ),
         }
     if confidence < 0.2:
         return {
             "category": "insufficient_evidence",
             "title": "Mock readiness is still too uncertain",
-            "detail": "Need more completed practice evidence before escalating to a readiness check.",
+            "detail": (
+                "Need more completed practice evidence before escalating to a readiness check."
+            ),
         }
     if estimate >= 0.35 and confidence >= 0.25:
         return {
             "category": "emerging_readiness",
             "title": "Mock readiness is starting to emerge",
-            "detail": "The current evidence is improving, but the system should still stay conservative.",
+            "detail": (
+                "The current evidence is improving, but the system should still stay conservative."
+            ),
         }
     return {
         "category": "not_ready_yet",
         "title": "A mock would still be premature",
-        "detail": "The current learner state still favors more reinforcement or review before escalation.",
+        "detail": (
+            "The current learner state still favors more reinforcement or review before escalation."
+        ),
     }
 
 
@@ -188,7 +199,9 @@ def _evidence_posture(
         }
 
     details: list[str] = []
-    if any(_metric(summary, "hint_dependency_signal") >= 0.25 for summary in concept_state.values()):
+    if any(
+        _metric(summary, "hint_dependency_signal") >= 0.25 for summary in concept_state.values()
+    ):
         details.append("Recent work still shows support-dependent evidence.")
     if _metric(trajectory_state, "recent_abandonment_signal") >= 0.25:
         details.append("Recent unfinished sessions lower confidence in the summary.")
@@ -196,7 +209,10 @@ def _evidence_posture(
     if len(concept_confidences) < 2 or max(concept_confidences, default=0.0) < 0.5:
         details.append("The current summary is still based on limited repeated evidence.")
     if not details:
-        details.append("Recent reviewed evidence is becoming more stable, but the summary remains conservative.")
+        details.append(
+            "Recent reviewed evidence is becoming more stable, but the summary "
+            "remains conservative."
+        )
 
     return {
         "category": "conservative_summary",

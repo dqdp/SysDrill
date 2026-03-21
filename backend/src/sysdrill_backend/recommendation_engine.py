@@ -1,5 +1,6 @@
 import copy
 import threading
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -27,6 +28,10 @@ class RecommendationDecisionNotFoundError(RecommendationEngineError):
     pass
 
 
+class RecommendationDecisionLifecycleError(RecommendationEngineError):
+    pass
+
+
 def _strictness_profile(mode: str) -> str:
     if mode == "Study":
         return "supportive"
@@ -46,7 +51,9 @@ def _action_pattern(action: dict[str, Any]) -> tuple[str, str, str]:
 class RecommendationEngine:
     def __init__(self, runtime: Any, learner_projector: Any | None = None):
         self._runtime = runtime
-        self._learner_projector = LearnerProjector() if learner_projector is None else learner_projector
+        self._learner_projector = (
+            LearnerProjector() if learner_projector is None else learner_projector
+        )
         self._decisions: dict[str, dict[str, Any]] = {}
         self._decision_counter = 0
         self._state_lock = threading.RLock()
@@ -97,12 +104,39 @@ class RecommendationEngine:
     def mark_accepted(self, decision_id: str, session_id: str) -> None:
         with self._state_lock:
             decision = self._require_decision(decision_id)
-            decision["accepted_at"] = self._utc_now_iso()
-            decision["accepted_session_id"] = session_id
+            self._record_acceptance(decision, session_id)
+
+    def accept_session(
+        self,
+        decision_id: str,
+        session_starter: Callable[[], dict[str, Any]],
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            decision = self._require_decision(decision_id)
+            self._ensure_decision_not_accepted(decision)
+            session = session_starter()
+            session_id = session.get("session_id")
+            if not isinstance(session_id, str) or not session_id:
+                raise RecommendationDecisionLifecycleError(
+                    "accepted session must include a non-empty session_id"
+                )
+            self._record_acceptance(decision, session_id)
+            return session
 
     def mark_completed(self, decision_id: str, session_id: str) -> None:
         with self._state_lock:
             decision = self._require_decision(decision_id)
+            accepted_session_id = decision.get("accepted_session_id")
+            if not isinstance(accepted_session_id, str) or not accepted_session_id:
+                raise RecommendationDecisionLifecycleError(
+                    "decision must be accepted before it can be completed"
+                )
+            if accepted_session_id != session_id:
+                raise RecommendationDecisionLifecycleError(
+                    "decision can only complete for its accepted session"
+                )
+            if decision.get("completed_at") is not None:
+                raise RecommendationDecisionLifecycleError("decision is already completed")
             decision["completed_at"] = self._utc_now_iso()
             decision["completed_session_id"] = session_id
 
@@ -485,7 +519,12 @@ class RecommendationEngine:
             for decision in self._decisions.values()
             if decision["user_id"] == user_id and decision["accepted_at"] is not None
         ]
-        accepted_records.sort(key=lambda decision: decision["decision_id"])
+        accepted_records.sort(
+            key=lambda decision: (
+                _timestamp_sort_key(decision.get("accepted_at")),
+                decision.get("decision_id", ""),
+            )
+        )
         return [_action_pattern(decision["chosen_action"]) for decision in accepted_records]
 
     def _require_decision(self, decision_id: str) -> dict[str, Any]:
@@ -502,6 +541,15 @@ class RecommendationEngine:
 
     def _utc_now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _record_acceptance(self, decision: dict[str, Any], session_id: str) -> None:
+        self._ensure_decision_not_accepted(decision)
+        decision["accepted_at"] = self._utc_now_iso()
+        decision["accepted_session_id"] = session_id
+
+    def _ensure_decision_not_accepted(self, decision: dict[str, Any]) -> None:
+        if decision.get("accepted_at") is not None:
+            raise RecommendationDecisionLifecycleError("decision is already accepted")
 
 
 def _is_confirmed_weak(concept_summary: dict[str, Any]) -> bool:
@@ -542,7 +590,10 @@ def _supported_subskill_gap(subskill_state: dict[str, dict[str, Any]]) -> bool:
         summary = subskill_state.get(subskill_id)
         if not isinstance(summary, dict):
             continue
-        if _metric(summary, "proficiency_estimate") <= 0.45 and _metric(summary, "confidence") >= 0.25:
+        if (
+            _metric(summary, "proficiency_estimate") <= 0.45
+            and _metric(summary, "confidence") >= 0.25
+        ):
             return True
     return False
 
@@ -552,3 +603,17 @@ def _metric(summary: dict[str, Any], key: str) -> float:
     if not isinstance(value, (int, float)):
         return 0.0
     return float(value)
+
+
+def _timestamp_sort_key(value: Any) -> tuple[int, str]:
+    if not isinstance(value, str) or not value:
+        return (1, "")
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return (1, "")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return (0, parsed.astimezone(timezone.utc).isoformat())

@@ -796,6 +796,61 @@ describe("App", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toContain("/recommendations/next");
   });
 
+  it("recovers from a stale cached recommendation after a stale 400 start failure", async () => {
+    setStoredRecommendation(recommendationPayloadData("Stale cached recommendation."));
+    fetchMock
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockResolvedValueOnce(
+        errorResponse(
+          400,
+          "recommendation action target_id 'concept.alpha-topic' is not currently resolvable",
+        ),
+      )
+      .mockResolvedValueOnce(
+        recommendationPayload("Fresh recommendation after stale 400 decision."),
+      );
+
+    render(<App />);
+
+    expect(await screen.findByText("Stale cached recommendation.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+
+    expect(
+      await screen.findByText(
+        "The saved recommendation is no longer available. Loaded a fresh recommendation.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Fresh recommendation after stale 400 decision."),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    });
+    expect(fetchMock.mock.calls[3]?.[0]).toContain("/recommendations/next");
+  });
+
+  it("does not refresh recommendation for non-stale 400 start failures", async () => {
+    setStoredRecommendation(recommendationPayloadData("Saved recommendation."));
+    fetchMock
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockResolvedValueOnce(errorResponse(400, "decision_id does not belong to user_id"));
+
+    render(<App />);
+
+    expect(await screen.findByText("Saved recommendation.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start recommended session" }));
+
+    expect(
+      (await screen.findAllByText("decision_id does not belong to user_id")).length,
+    ).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+    expect(screen.getByText("Saved recommendation.")).toBeInTheDocument();
+  });
+
   it("smoke-tests reload recovery through review and back to the launcher", async () => {
     setStoredSessionEnvelope({
       sessionId: "session.0090",

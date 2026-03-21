@@ -5,6 +5,7 @@ from pathlib import Path
 from sysdrill_backend.content_bundle_reader import load_topic_catalog
 from sysdrill_backend.recommendation_engine import (
     NoRecommendationCandidatesError,
+    RecommendationDecisionLifecycleError,
     RecommendationDecisionNotFoundError,
     RecommendationEngine,
 )
@@ -268,6 +269,125 @@ class RecommendationEngineTest(unittest.TestCase):
     def test_get_unknown_decision_fails_closed(self):
         with self.assertRaisesRegex(RecommendationDecisionNotFoundError, "unknown decision_id"):
             self.engine.get_decision("rec.missing")
+
+    def test_mark_accepted_rejects_second_acceptance_for_same_decision(self):
+        decision = self.engine.next_recommendation(user_id="demo-user")
+
+        self.engine.mark_accepted(decision["decision_id"], session_id="session.0001")
+
+        with self.assertRaisesRegex(
+            RecommendationDecisionLifecycleError,
+            "already accepted",
+        ):
+            self.engine.mark_accepted(decision["decision_id"], session_id="session.0002")
+
+        stored = self.engine.get_decision(decision["decision_id"])
+        self.assertEqual(stored["accepted_session_id"], "session.0001")
+
+    def test_mark_completed_requires_matching_accepted_session(self):
+        decision = self.engine.next_recommendation(user_id="demo-user")
+        self.engine.mark_accepted(decision["decision_id"], session_id="session.0001")
+
+        with self.assertRaisesRegex(
+            RecommendationDecisionLifecycleError,
+            "accepted session",
+        ):
+            self.engine.mark_completed(decision["decision_id"], session_id="session.0002")
+
+        self.engine.mark_completed(decision["decision_id"], session_id="session.0001")
+        stored = self.engine.get_decision(decision["decision_id"])
+        self.assertEqual(stored["completed_session_id"], "session.0001")
+
+    def test_recent_accepted_patterns_follow_acceptance_time_not_decision_id(self):
+        self.engine._decisions = {
+            "rec.0001": {
+                "user_id": "demo-user",
+                "accepted_at": "2026-03-20T10:05:00Z",
+                "chosen_action": {
+                    "mode": "Study",
+                    "session_intent": "LearnNew",
+                    "target_id": "concept.alpha-topic",
+                },
+            },
+            "rec.0002": {
+                "user_id": "demo-user",
+                "accepted_at": "2026-03-20T10:03:00Z",
+                "chosen_action": {
+                    "mode": "Practice",
+                    "session_intent": "Remediate",
+                    "target_id": "concept.beta-topic",
+                },
+            },
+        }
+
+        self.assertEqual(
+            self.engine._recent_accepted_patterns("demo-user"),
+            [
+                ("Practice", "Remediate", "concept.beta-topic"),
+                ("Study", "LearnNew", "concept.alpha-topic"),
+            ],
+        )
+
+    def test_next_recommendation_uses_latest_reviewed_outcome_by_review_time(self):
+        first_session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        second_session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+
+        self.runtime.submit_answer(
+            session_id=second_session["session_id"],
+            transcript=_strong_transcript(),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(second_session["session_id"])
+        self.runtime.submit_answer(
+            session_id=first_session["session_id"],
+            transcript=_weak_transcript(),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(first_session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.62,
+                            "review_due_risk": 0.2,
+                            "hint_dependency_signal": 0.0,
+                            "last_evidence_at": "2026-03-20T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {},
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.0,
+                        "recent_abandonment_signal": 0.0,
+                        "mock_readiness_estimate": 0.1,
+                        "mock_readiness_confidence": 0.1,
+                        "last_active_at": "2026-03-20T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-20T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Practice")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "Reinforce")
 
     def test_next_recommendation_uses_injected_projector_as_primary_state_input(self):
         session = self.runtime.start_manual_session(

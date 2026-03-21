@@ -1167,7 +1167,21 @@ function isMissingSessionError(error: unknown): boolean {
 }
 
 function isStaleRecommendationStartError(error: unknown): boolean {
-  return isNotFoundError(error);
+  if (isNotFoundError(error)) {
+    return true;
+  }
+  if (!(error instanceof ApiError) || error.status !== 400) {
+    return false;
+  }
+
+  const message = errorMessage(error);
+  return [
+    "unknown decision_id",
+    "request action does not match stored chosen_action",
+    "is not currently resolvable",
+    "does not match resolved unit",
+    "unsupported runtime mode/session_intent combination",
+  ].some((detail) => message.includes(detail));
 }
 
 function isNotFoundError(error: unknown): boolean {

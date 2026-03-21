@@ -75,6 +75,11 @@ Signals driven by time since last meaningful attempt.
 Sources:
 - timestamps on semantic events
 
+Interpretation rule:
+Recency-sensitive updates should compare evidence timestamps against the current
+evaluation time, not only against the newest event already present in the
+rebuilt learner profile.
+
 ## Primary update event
 
 `evaluation_attached` is the primary proficiency update event in v1.
@@ -224,6 +229,8 @@ Unknown must remain distinct from weak. Sparse negative evidence should not be o
 
 Rule:
 Review due risk is driven by time plus fragility, not by time alone.
+Time-sensitive review-due evaluation should therefore be anchored to current
+wall-clock time when the profile is rebuilt.
 
 ## Mock-readiness rules
 
