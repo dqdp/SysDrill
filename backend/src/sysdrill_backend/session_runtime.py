@@ -213,6 +213,20 @@ class SessionRuntime:
                 copy.deepcopy(event) for event in self._events if event["session_id"] == session_id
             ]
 
+    def list_user_sessions(self, user_id: str) -> list[dict[str, Any]]:
+        with self._state_lock:
+            sessions = []
+            for session in self._sessions.values():
+                if session["user_id"] != user_id:
+                    continue
+                # Projection must consume runtime-owned read seams, not mutable internals.
+                snapshot = self._snapshot_session(session)
+                snapshot["source"] = session["source"]
+                sessions.append(snapshot)
+
+            sessions.sort(key=lambda payload: payload["session_id"])
+            return copy.deepcopy(sessions)
+
     def list_manual_launch_options(
         self,
         mode: str,
