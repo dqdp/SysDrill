@@ -367,6 +367,13 @@ def _materialize_scenario_readiness_units(
                 scenario_index,
                 record_kind="scenario",
             )
+            scenario_title = _required_non_empty_string(
+                scenario,
+                "title",
+                topic_slug,
+                scenario_index,
+                record_kind="scenario",
+            )
             scenario_prompt = _required_non_empty_string(
                 scenario,
                 "prompt",
@@ -395,7 +402,7 @@ def _materialize_scenario_readiness_units(
                 scenario_index,
                 record_kind="scenario",
             )
-            _required_non_empty_string_list(
+            canonical_follow_up_candidates = _required_non_empty_string_list(
                 scenario,
                 "canonical_follow_up_candidates",
                 topic_slug,
@@ -411,7 +418,9 @@ def _materialize_scenario_readiness_units(
                     "session_intent": session_intent,
                     "unit_family": _SCENARIO_READINESS_UNIT_FAMILY,
                     "scenario_family": binding["scenario_family"],
+                    "scenario_title": scenario_title,
                     "visible_prompt": scenario_prompt,
+                    "canonical_follow_up_candidates": canonical_follow_up_candidates,
                     "pedagogical_goal": _SCENARIO_READINESS_PEDAGOGICAL_GOAL,
                     "effective_difficulty": effective_difficulty,
                     "allowed_hint_levels": list(_SCENARIO_READINESS_POLICY["allowed_hint_levels"]),

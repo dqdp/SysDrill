@@ -243,6 +243,121 @@ describe("App", () => {
     expect(calls[9]).toContain("/learner/summary");
   });
 
+  it("runs a bounded mock follow-up loop from the manual launcher", async () => {
+    fetchMock
+      .mockResolvedValueOnce(recommendationPayload("Start here."))
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockResolvedValueOnce(mockManualLaunchOptionsPayload())
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0100",
+          state: "awaiting_answer",
+          current_unit: {
+            id: "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.url-shortener.basic",
+            visible_prompt:
+              "Design a URL Shortener for a read-heavy product with high availability requirements.",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0100",
+          state: "follow_up_round",
+          current_unit: {
+            id: "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.url-shortener.basic",
+            visible_prompt:
+              "How would you generate short identifiers without creating avoidable collisions?",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0100",
+          state: "evaluation_pending",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0100",
+          state: "review_presented",
+          evaluation_result: {
+            evaluation_id: "evaluation.0100",
+            weighted_score: 0.71,
+            overall_confidence: 0.76,
+            missing_dimensions: ["reliability_awareness"],
+          },
+          review_report: {
+            strengths: ["The answer covered redirect reads, storage, and identifier generation."],
+            missed_dimensions: ["Reliability awareness"],
+            reasoning_gaps: ["Failure handling and abuse prevention stayed shallow."],
+            recommended_next_focus:
+              "Tighten reliability trade-offs and explain how id generation behaves under contention.",
+            support_dependence_note: null,
+            follow_up_handling_note:
+              "Follow-up handling stayed concrete enough to defend the identifier strategy.",
+          },
+        }),
+      );
+
+    render(<App />);
+
+    await screen.findByText("Start here.");
+
+    fireEvent.click(
+      await screen.findByRole("radio", {
+        name: /Mock Interview \/ Readiness Check/i,
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Design a URL Shortener for a read-heavy product with high availability requirements.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+
+    expect(
+      await screen.findByRole("textbox", { name: "Your answer" }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), {
+      target: {
+        value:
+          "I would start with redirect reads, durable mapping storage, and short-id generation.",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Request review" }));
+
+    expect(
+      await screen.findByText(
+        "How would you generate short identifiers without creating avoidable collisions?",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), {
+      target: {
+        value:
+          "I would use a counter or random strategy with collision checks and cache the redirect path.",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Request review" }));
+
+    expect(await screen.findByText("0.71")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Follow-up handling stayed concrete enough to defend the identifier strategy.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Tighten reliability trade-offs and explain how id generation behaves under contention.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows recommendation errors explicitly while leaving manual fallback visible", async () => {
     fetchMock
       .mockResolvedValueOnce(errorResponse(503, "runtime content is not configured"))
@@ -1052,6 +1167,25 @@ function manualLaunchOptionsPayload(): Response {
         display_title: "Кэширование",
         visible_prompt: "Explain caching.",
         effective_difficulty: "introductory",
+      },
+    ],
+  });
+}
+
+function mockManualLaunchOptionsPayload(): Response {
+  return jsonResponse({
+    mode: "MockInterview",
+    session_intent: "ReadinessCheck",
+    items: [
+      {
+        unit_id:
+          "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.url-shortener.basic",
+        content_id: "scenario.url-shortener.basic",
+        topic_slug: "url-shortener",
+        display_title: "Design a URL Shortener",
+        visible_prompt:
+          "Design a URL Shortener for a read-heavy product with high availability requirements.",
+        effective_difficulty: "standard",
       },
     ],
   });

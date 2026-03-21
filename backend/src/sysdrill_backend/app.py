@@ -247,12 +247,16 @@ def create_app(
                 submission_kind=request.submission_kind,
                 response_latency_ms=request.response_latency_ms,
             )
-            return {
+            response = {
                 "session_id": result["session"]["session_id"],
                 "state": result["session"]["state"],
-                "submitted_unit_id": result["submitted_unit_id"],
-                "evaluation_request": result["evaluation_request"],
+                "current_unit": result["session"]["current_unit"],
             }
+            if result.get("submitted_unit_id") is not None:
+                response["submitted_unit_id"] = result["submitted_unit_id"]
+            if isinstance(result.get("evaluation_request"), dict):
+                response["evaluation_request"] = result["evaluation_request"]
+            return response
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SessionRuntimeInvalidStateError as exc:

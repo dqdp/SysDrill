@@ -13,6 +13,10 @@ class BackendManualReviewedLoopSmokeTest(unittest.TestCase):
             create_app(content_export_root=export_root, allow_draft_bundles=True)
         )
         self.study_unit_id = "elu.concept_recall.study.learn_new.concept.alpha-topic"
+        self.mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.url-shortener.basic"
+        )
 
     def test_manual_reviewed_loop_reaches_review_presented(self):
         topics_response = self.client.get("/content/topics")
@@ -75,6 +79,59 @@ class BackendManualReviewedLoopSmokeTest(unittest.TestCase):
             review_payload["review_report"]["linked_evaluation_ids"],
             [evaluate_payload["evaluation_result"]["evaluation_id"]],
         )
+
+    def test_mock_readiness_loop_reaches_review_presented(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "smoke-user",
+                "mode": "MockInterview",
+                "session_intent": "ReadinessCheck",
+                "unit_id": self.mock_unit_id,
+            },
+        )
+        self.assertEqual(start_response.status_code, 200)
+        session_payload = start_response.json()
+        self.assertEqual(session_payload["state"], "awaiting_answer")
+        session_id = session_payload["session_id"]
+
+        answer_response = self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": (
+                    "I would begin with the redirect path, durable mapping storage, "
+                    "and id generation because the workload is read-heavy."
+                ),
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+        self.assertEqual(answer_response.status_code, 200)
+        self.assertEqual(answer_response.json()["state"], "follow_up_round")
+
+        follow_up_response = self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": (
+                    "I would use a counter or random-id strategy with collision "
+                    "checks and cache the redirect reads."
+                ),
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+        self.assertEqual(follow_up_response.status_code, 200)
+        self.assertEqual(follow_up_response.json()["state"], "evaluation_pending")
+
+        evaluate_response = self.client.post("/runtime/sessions/{0}/evaluate".format(session_id))
+        self.assertEqual(evaluate_response.status_code, 200)
+        evaluate_payload = evaluate_response.json()
+        self.assertEqual(evaluate_payload["state"], "review_presented")
+        self.assertEqual(
+            evaluate_payload["evaluation_result"]["binding_id"],
+            "binding.url_shortener.v1",
+        )
+        self.assertIn("follow_up_handling_note", evaluate_payload["review_report"])
 
 
 if __name__ == "__main__":

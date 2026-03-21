@@ -194,10 +194,19 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
                     "session_intent": "ReadinessCheck",
                     "unit_family": "scenario_readiness_check",
                     "scenario_family": "url_shortener",
+                    "scenario_title": "Design a URL Shortener",
                     "visible_prompt": (
                         "Design a URL Shortener for a read-heavy product with high "
                         "availability requirements."
                     ),
+                    "canonical_follow_up_candidates": [
+                        (
+                            "How would you generate short identifiers without creating "
+                            "avoidable collisions?"
+                        ),
+                        "What would change if write traffic grew much faster than expected?",
+                        "Where would caching help, and where could it create correctness risk?",
+                    ],
                     "pedagogical_goal": "bounded_mock_readiness_check",
                     "effective_difficulty": "standard",
                     "allowed_hint_levels": [1],

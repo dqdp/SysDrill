@@ -78,6 +78,21 @@ export type EvaluateResponse = {
     reasoning_gaps: string[];
     recommended_next_focus: string;
     support_dependence_note?: string | null;
+    follow_up_handling_note?: string | null;
+  };
+};
+
+export type SubmitAnswerResponse = {
+  session_id: string;
+  state: string;
+  current_unit?: {
+    id: string;
+    visible_prompt: string;
+  };
+  submitted_unit_id?: string;
+  evaluation_request?: {
+    binding_id: string;
+    unit_family: string;
   };
 };
 
@@ -206,8 +221,8 @@ export async function startRecommendedSession(
 export async function submitAnswer(
   sessionId: string,
   transcript: string,
-): Promise<void> {
-  await request(`/runtime/sessions/${sessionId}/answer`, {
+): Promise<SubmitAnswerResponse> {
+  return request<SubmitAnswerResponse>(`/runtime/sessions/${sessionId}/answer`, {
     method: "POST",
     body: JSON.stringify({
       transcript,

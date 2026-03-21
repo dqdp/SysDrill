@@ -13,6 +13,10 @@ _SUPPORTED_UNIT_FAMILY = "concept_recall"
 _RUBRIC_VERSION_REF = "rubric.v1"
 _EVALUATOR_VERSION_REF = "rule_first.concept_recall.v1"
 _BINDING_VERSION_REF = "binding.concept_recall.v1"
+_URL_SHORTENER_BINDING_ID = "binding.url_shortener.v1"
+_URL_SHORTENER_UNIT_FAMILY = "scenario_readiness_check"
+_URL_SHORTENER_EVALUATOR_VERSION_REF = "rule_first.url_shortener.v1"
+_URL_SHORTENER_BINDING_VERSION_REF = "binding.url_shortener.v1"
 
 _CRITERION_ORDER = [
     "concept_explanation",
@@ -111,6 +115,118 @@ _TRADEOFF_QUALIFIERS = [
     "cost",
     "invalidat",
 ]
+_URL_SHORTENER_CRITERION_ORDER = [
+    "requirements_understanding",
+    "decomposition_quality",
+    "data_and_storage_choices",
+    "scaling_strategy",
+    "reliability_awareness",
+    "trade_off_articulation",
+    "communication_clarity",
+]
+_URL_SHORTENER_CRITERION_METADATA: dict[str, dict[str, Any]] = {
+    "requirements_understanding": {
+        "applicability": "required",
+        "weight": 1.0,
+        "missing_aspect": "state the read-heavy and availability requirements",
+    },
+    "decomposition_quality": {
+        "applicability": "required",
+        "weight": 1.2,
+        "missing_aspect": "decompose the system into redirect, id, and storage paths",
+    },
+    "data_and_storage_choices": {
+        "applicability": "required",
+        "weight": 1.2,
+        "missing_aspect": "name a concrete mapping store and access pattern",
+    },
+    "scaling_strategy": {
+        "applicability": "required",
+        "weight": 1.2,
+        "missing_aspect": "explain how the read-heavy path scales",
+    },
+    "reliability_awareness": {
+        "applicability": "secondary",
+        "weight": 0.7,
+        "missing_aspect": "surface availability or correctness risks",
+    },
+    "trade_off_articulation": {
+        "applicability": "required",
+        "weight": 1.0,
+        "missing_aspect": "defend the main trade-offs",
+    },
+    "communication_clarity": {
+        "applicability": "secondary",
+        "weight": 0.7,
+        "missing_aspect": "present the design in a clearer sequence",
+    },
+}
+_URL_SHORTENER_REQUIREMENT_MARKERS = [
+    "read-heavy",
+    "availability",
+    "high availability",
+    "latency",
+    "redirect",
+]
+_URL_SHORTENER_COMPONENT_MARKERS = [
+    "redirect",
+    "api",
+    "service",
+    "store",
+    "storage",
+    "database",
+    "cache",
+    "counter",
+    "id generation",
+]
+_URL_SHORTENER_STORAGE_MARKERS = [
+    "store",
+    "storage",
+    "database",
+    "db",
+    "mapping",
+    "key-value",
+    "kv",
+]
+_URL_SHORTENER_SCALING_MARKERS = [
+    "cache",
+    "read-heavy",
+    "replica",
+    "replication",
+    "shard",
+    "scal",
+    "throughput",
+]
+_URL_SHORTENER_RELIABILITY_MARKERS = [
+    "availability",
+    "collision",
+    "retry",
+    "replica",
+    "replication",
+    "failover",
+    "durable",
+    "correctness",
+]
+_URL_SHORTENER_ID_MARKERS = [
+    "id",
+    "identifier",
+    "counter",
+    "random",
+    "base62",
+    "slug",
+    "collision",
+]
+
+
+def evaluate_request(request: dict[str, Any]) -> dict[str, Any]:
+    binding_id = request.get("binding_id")
+    if binding_id == _SUPPORTED_BINDING_ID:
+        return evaluate_concept_recall(request)
+    if binding_id == _URL_SHORTENER_BINDING_ID:
+        return evaluate_url_shortener_readiness(request)
+    raise RuleFirstEvaluationError(
+        "unsupported binding for rule-first evaluation: {0}".format(binding_id)
+    )
 
 
 def evaluate_concept_recall(request: dict[str, Any]) -> dict[str, Any]:
@@ -172,6 +288,77 @@ def evaluate_concept_recall(request: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def evaluate_url_shortener_readiness(request: dict[str, Any]) -> dict[str, Any]:
+    _validate_url_shortener_request(request)
+    primary_metrics = _transcript_metrics(request["transcript_text"])
+    follow_up_metrics = _transcript_metrics(request["follow_up_transcript_text"])
+    combined_metrics = _combine_transcript_metrics(primary_metrics, follow_up_metrics)
+    criterion_results = _build_url_shortener_criterion_results(
+        primary_metrics=primary_metrics,
+        follow_up_metrics=follow_up_metrics,
+        combined_metrics=combined_metrics,
+    )
+    missing_dimensions = [
+        criterion["criterion_id"]
+        for criterion in criterion_results
+        if criterion["applicability"] == "required" and criterion["score_band"] < 2
+    ]
+    overall_confidence = _scenario_overall_confidence(
+        request,
+        combined_metrics,
+        missing_dimensions,
+    )
+    gating_failures = _url_shortener_gating_failures(request, combined_metrics)
+    weighted_score = _scenario_weighted_score(criterion_results, request["session_mode"])
+    downstream_signals = _url_shortener_downstream_signals(
+        request=request,
+        criterion_results=criterion_results,
+        weighted_score=weighted_score,
+        overall_confidence=overall_confidence,
+        gating_failures=gating_failures,
+    )
+    review_summary = _url_shortener_review_summary(
+        criterion_results=criterion_results,
+        missing_dimensions=missing_dimensions,
+        downstream_signals=downstream_signals,
+        follow_up_metrics=follow_up_metrics,
+    )
+    evaluation_id = _deterministic_id("evaluation", request)
+    evaluation_result = {
+        "evaluation_id": evaluation_id,
+        "session_id": request["session_id"],
+        "unit_id": request["executable_unit_id"],
+        "binding_id": request["binding_id"],
+        "criterion_results": criterion_results,
+        "gating_failures": gating_failures,
+        "weighted_score": weighted_score,
+        "overall_confidence": overall_confidence,
+        "missing_dimensions": missing_dimensions,
+        "review_summary": review_summary,
+        "summary_feedback": review_summary,
+        "downstream_signals": downstream_signals,
+        "rubric_version": _RUBRIC_VERSION_REF,
+        "rubric_version_ref": _RUBRIC_VERSION_REF,
+        "binding_version_ref": _URL_SHORTENER_BINDING_VERSION_REF,
+        "evaluation_mode": "rule_only",
+        "evaluator_version_ref": _URL_SHORTENER_EVALUATOR_VERSION_REF,
+    }
+    review_report = {
+        "session_id": request["session_id"],
+        "strengths": list(review_summary["strengths"]),
+        "missed_dimensions": list(review_summary["missed_dimensions"]),
+        "reasoning_gaps": list(review_summary["shallow_areas"]),
+        "recommended_next_focus": review_summary["next_focus_suggestion"],
+        "linked_evaluation_ids": [evaluation_id],
+        "support_dependence_note": review_summary["support_dependence_note"],
+        "follow_up_handling_note": review_summary["follow_up_handling_note"],
+    }
+    return {
+        "evaluation_result": evaluation_result,
+        "review_report": review_report,
+    }
+
+
 def _validate_request(request: dict[str, Any]) -> None:
     if request.get("binding_id") != _SUPPORTED_BINDING_ID:
         raise RuleFirstEvaluationError(
@@ -187,6 +374,34 @@ def _validate_request(request: dict[str, Any]) -> None:
         )
     if not isinstance(request.get("transcript_text"), str):
         raise RuleFirstEvaluationError("transcript_text must be a string")
+    hint_usage_summary = request.get("hint_usage_summary")
+    if not isinstance(hint_usage_summary, dict):
+        raise RuleFirstEvaluationError("hint_usage_summary must be a mapping")
+
+
+def _validate_url_shortener_request(request: dict[str, Any]) -> None:
+    if request.get("binding_id") != _URL_SHORTENER_BINDING_ID:
+        raise RuleFirstEvaluationError(
+            "unsupported binding for rule-first url-shortener evaluation: {0}".format(
+                request.get("binding_id")
+            )
+        )
+    if request.get("unit_family") != _URL_SHORTENER_UNIT_FAMILY:
+        raise RuleFirstEvaluationError(
+            "unsupported unit_family for url-shortener evaluation: {0}".format(
+                request.get("unit_family")
+            )
+        )
+    if request.get("scenario_family") != "url_shortener":
+        raise RuleFirstEvaluationError(
+            "unsupported scenario_family for url-shortener evaluation: {0}".format(
+                request.get("scenario_family")
+            )
+        )
+    if not isinstance(request.get("transcript_text"), str):
+        raise RuleFirstEvaluationError("transcript_text must be a string")
+    if not isinstance(request.get("follow_up_transcript_text"), str):
+        raise RuleFirstEvaluationError("follow_up_transcript_text must be a string")
     hint_usage_summary = request.get("hint_usage_summary")
     if not isinstance(hint_usage_summary, dict):
         raise RuleFirstEvaluationError("hint_usage_summary must be a mapping")
@@ -524,6 +739,384 @@ def _review_summary(
     }
 
 
+def _combine_transcript_metrics(
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    combined_text = " ".join(
+        [
+            primary_metrics["normalized_text"].strip(),
+            follow_up_metrics["normalized_text"].strip(),
+        ]
+    ).strip()
+    return {
+        "normalized_text": " {0} ".format(combined_text) if combined_text else "  ",
+        "char_count": primary_metrics["char_count"] + follow_up_metrics["char_count"],
+        "sentence_count": primary_metrics["sentence_count"] + follow_up_metrics["sentence_count"],
+    }
+
+
+def _build_url_shortener_criterion_results(
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> list[dict[str, Any]]:
+    criterion_results = []
+    for criterion_id in _URL_SHORTENER_CRITERION_ORDER:
+        metadata = _URL_SHORTENER_CRITERION_METADATA[criterion_id]
+        score_band = _url_shortener_score_band(
+            criterion_id=criterion_id,
+            primary_metrics=primary_metrics,
+            follow_up_metrics=follow_up_metrics,
+            combined_metrics=combined_metrics,
+        )
+        missing_aspects = []
+        if metadata["applicability"] == "required" and score_band < 2:
+            missing_aspects.append(metadata["missing_aspect"])
+        criterion_results.append(
+            {
+                "criterion_id": criterion_id,
+                "applicability": metadata["applicability"],
+                "score_band": score_band,
+                "weight": metadata["weight"],
+                "weight_used": metadata["weight"],
+                "observed_evidence": _url_shortener_observed_evidence(
+                    criterion_id,
+                    primary_metrics,
+                    follow_up_metrics,
+                    combined_metrics,
+                ),
+                "missing_aspects": missing_aspects,
+            }
+        )
+    return criterion_results
+
+
+def _url_shortener_score_band(
+    criterion_id: str,
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> int:
+    combined_text = combined_metrics["normalized_text"]
+    follow_up_text = follow_up_metrics["normalized_text"]
+    if criterion_id == "requirements_understanding":
+        requirement_cues = (
+            int("read-heavy" in combined_text)
+            + int(_contains_any(combined_text, ["availability", "high availability"]))
+            + int(_contains_any(combined_text, ["latency", "redirect"]))
+        )
+        return _score_from_count(requirement_cues)
+    if criterion_id == "decomposition_quality":
+        return _score_from_count(_marker_hits(combined_text, _URL_SHORTENER_COMPONENT_MARKERS))
+    if criterion_id == "data_and_storage_choices":
+        storage_cues = int(_contains_any(combined_text, _URL_SHORTENER_STORAGE_MARKERS))
+        mapping_cues = int(
+            _contains_any(
+                combined_text,
+                ["mapping", "long url", "short url", "lookup", "redirect"],
+            )
+        )
+        id_cues = int(_contains_any(follow_up_text, _URL_SHORTENER_ID_MARKERS))
+        return _score_from_count(storage_cues + mapping_cues + id_cues)
+    if criterion_id == "scaling_strategy":
+        scaling_cues = (
+            int(_contains_any(combined_text, ["cache", "caching"]))
+            + int(_contains_any(combined_text, ["read-heavy", "redirect"]))
+            + int(_contains_any(combined_text, ["replica", "replication", "shard", "scale"]))
+        )
+        return _score_from_count(scaling_cues)
+    if criterion_id == "reliability_awareness":
+        return _score_from_count(_marker_hits(combined_text, _URL_SHORTENER_RELIABILITY_MARKERS))
+    if criterion_id == "trade_off_articulation":
+        tradeoff_score = int(_contains_any(combined_text, _TRADEOFF_MARKERS)) + int(
+            _contains_any(combined_text, _TRADEOFF_QUALIFIERS)
+        )
+        return _score_from_count(tradeoff_score)
+    if criterion_id == "communication_clarity":
+        if combined_metrics["char_count"] >= 180 and combined_metrics["sentence_count"] >= 3:
+            return 3
+        if combined_metrics["char_count"] >= 90 and combined_metrics["sentence_count"] >= 2:
+            return 2
+        if combined_metrics["char_count"] >= 40:
+            return 1
+        return 0
+    raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
+
+
+def _url_shortener_observed_evidence(
+    criterion_id: str,
+    primary_metrics: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> list[str]:
+    combined_text = combined_metrics["normalized_text"]
+    follow_up_text = follow_up_metrics["normalized_text"]
+    if criterion_id == "requirements_understanding":
+        return _evidence_lines(
+            [
+                ("Mentions the read-heavy workload.", "read-heavy" in combined_text),
+                (
+                    "Surfaces availability pressure.",
+                    _contains_any(combined_text, ["availability", "high availability"]),
+                ),
+                ("Keeps the redirect path in scope.", "redirect" in combined_text),
+            ]
+        )
+    if criterion_id == "decomposition_quality":
+        return _evidence_lines(
+            [
+                ("Names the redirect/read path.", "redirect" in combined_text),
+                ("Calls out storage or a database layer.", "storage" in combined_text),
+                (
+                    "Separates identifier generation.",
+                    _contains_any(
+                        combined_text,
+                        ["counter", "random", "id generation", "collision"],
+                    ),
+                ),
+            ]
+        )
+    if criterion_id == "data_and_storage_choices":
+        return _evidence_lines(
+            [
+                (
+                    "Names a concrete mapping store.",
+                    _contains_any(combined_text, _URL_SHORTENER_STORAGE_MARKERS),
+                ),
+                ("Frames the short-id to URL mapping.", "mapping" in combined_text),
+                (
+                    "Defends the identifier strategy in the follow-up.",
+                    _contains_any(follow_up_text, _URL_SHORTENER_ID_MARKERS),
+                ),
+            ]
+        )
+    if criterion_id == "scaling_strategy":
+        return _evidence_lines(
+            [
+                ("Uses caching on the redirect path.", "cache" in combined_text),
+                ("Recognizes the read-heavy traffic shape.", "read-heavy" in combined_text),
+                (
+                    "Mentions replica, shard, or scale-out handling.",
+                    _contains_any(combined_text, ["replica", "shard", "scale"]),
+                ),
+            ]
+        )
+    if criterion_id == "reliability_awareness":
+        return _evidence_lines(
+            [
+                (
+                    "Names availability or durability concerns.",
+                    _contains_any(
+                        combined_text,
+                        ["availability", "durable", "replica", "failover"],
+                    ),
+                ),
+                (
+                    "Calls out collision or correctness risk.",
+                    _contains_any(combined_text, ["collision", "correctness"]),
+                ),
+            ]
+        )
+    if criterion_id == "trade_off_articulation":
+        return _evidence_lines(
+            [
+                (
+                    "Notes at least one design trade-off.",
+                    _contains_any(combined_text, _TRADEOFF_MARKERS),
+                ),
+                (
+                    "Makes the downside concrete.",
+                    _contains_any(combined_text, _TRADEOFF_QUALIFIERS),
+                ),
+            ]
+        )
+    if criterion_id == "communication_clarity":
+        return _evidence_lines(
+            [
+                (
+                    "Uses multiple sentences to structure the answer.",
+                    combined_metrics["sentence_count"] >= 2,
+                ),
+                (
+                    "Provides enough detail for a bounded review.",
+                    combined_metrics["char_count"] >= 90,
+                ),
+            ]
+        )
+    raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
+
+
+def _scenario_overall_confidence(
+    request: dict[str, Any],
+    combined_metrics: dict[str, Any],
+    missing_dimensions: list[str],
+) -> float:
+    char_count = combined_metrics["char_count"]
+    if char_count < 80:
+        confidence = 0.45
+    elif char_count < 140:
+        confidence = 0.62
+    elif char_count < 220:
+        confidence = 0.76
+    else:
+        confidence = 0.84
+    if missing_dimensions:
+        confidence -= min(0.2, 0.04 * len(missing_dimensions))
+    hint_usage_summary = request["hint_usage_summary"]
+    if hint_usage_summary.get("hint_count", 0) > 0 or hint_usage_summary.get(
+        "used_prior_hints", False
+    ):
+        confidence -= 0.1
+    if request.get("answer_reveal_flag", False):
+        confidence -= 0.15
+    if not request.get("follow_up_transcript_text", "").strip():
+        confidence -= 0.15
+    return round(max(0.1, min(1.0, confidence)), 2)
+
+
+def _url_shortener_gating_failures(
+    request: dict[str, Any],
+    combined_metrics: dict[str, Any],
+) -> list[str]:
+    if request.get("completion_status") != "submitted":
+        return ["evaluation_request is not in submitted state"]
+    if combined_metrics["char_count"] == 0:
+        return ["no substantive learner answer was captured"]
+    combined_text = combined_metrics["normalized_text"]
+    missing_id_anchor = not _contains_any(combined_text, _URL_SHORTENER_ID_MARKERS)
+    missing_scaling_anchor = not _contains_any(
+        combined_text,
+        ["cache", "read-heavy", "replica", "shard", "scale"],
+    )
+    missing_storage_anchor = not _contains_any(
+        combined_text,
+        ["store", "storage", "database", "mapping", "key-value", "lookup"],
+    )
+    if missing_id_anchor and missing_scaling_anchor and missing_storage_anchor:
+        return ["answer misses the required url-shortener design anchors"]
+    return []
+
+
+def _scenario_weighted_score(
+    criterion_results: list[dict[str, Any]],
+    session_mode: str,
+) -> float:
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for criterion in criterion_results:
+        weight = criterion["weight_used"]
+        weighted_sum += (criterion["score_band"] / 3.0) * weight
+        weight_total += weight
+    if weight_total == 0:
+        return 0.0
+    weighted_score = weighted_sum / weight_total
+    if session_mode == "Study":
+        weighted_score = min(1.0, weighted_score + 0.02)
+    return round(weighted_score, 4)
+
+
+def _url_shortener_downstream_signals(
+    request: dict[str, Any],
+    criterion_results: list[dict[str, Any]],
+    weighted_score: float,
+    overall_confidence: float,
+    gating_failures: list[str],
+) -> dict[str, Any]:
+    score_by_criterion = {
+        criterion["criterion_id"]: criterion["score_band"] for criterion in criterion_results
+    }
+    hint_usage_summary = request["hint_usage_summary"]
+    hint_dependency = 0.0
+    if hint_usage_summary.get("hint_count", 0) > 0:
+        hint_dependency += 0.35
+    if hint_usage_summary.get("used_prior_hints", False):
+        hint_dependency += 0.2
+    if request.get("answer_reveal_flag", False):
+        hint_dependency += 0.35
+    return {
+        "requirements_gap": round(
+            max(0.0, (3 - score_by_criterion["requirements_understanding"]) / 3.0),
+            4,
+        ),
+        "decomposition_gap": round(
+            max(0.0, (3 - score_by_criterion["decomposition_quality"]) / 3.0),
+            4,
+        ),
+        "storage_gap": round(
+            max(0.0, (3 - score_by_criterion["data_and_storage_choices"]) / 3.0),
+            4,
+        ),
+        "scaling_gap": round(
+            max(0.0, (3 - score_by_criterion["scaling_strategy"]) / 3.0),
+            4,
+        ),
+        "tradeoff_gap": round(
+            max(0.0, (3 - score_by_criterion["trade_off_articulation"]) / 3.0),
+            4,
+        ),
+        "hint_dependency": round(min(1.0, hint_dependency), 4),
+        "bounded_mock_pass": bool(
+            weighted_score >= 0.65
+            and overall_confidence >= 0.65
+            and not gating_failures
+            and score_by_criterion["trade_off_articulation"] >= 2
+            and score_by_criterion["communication_clarity"] >= 2
+        ),
+    }
+
+
+def _url_shortener_review_summary(
+    criterion_results: list[dict[str, Any]],
+    missing_dimensions: list[str],
+    downstream_signals: dict[str, Any],
+    follow_up_metrics: dict[str, Any],
+) -> dict[str, Any]:
+    strengths = []
+    shallow_areas = []
+    for criterion in criterion_results:
+        if criterion["score_band"] >= 2:
+            strengths.append(_strength_line(criterion["criterion_id"]))
+        elif criterion["score_band"] == 1:
+            shallow_areas.append(_shallow_line(criterion["criterion_id"]))
+
+    missed_dimensions = [_dimension_label(dimension) for dimension in missing_dimensions]
+    if missed_dimensions:
+        next_focus_suggestion = (
+            "Next, structure the answer around requirements, core components, "
+            "read-path scaling, and one defended trade-off."
+        )
+    else:
+        next_focus_suggestion = (
+            "Next, keep the same structure and add one explicit failure mode or "
+            "abuse-control boundary."
+        )
+
+    support_dependence_note = None
+    if downstream_signals["hint_dependency"] > 0.0:
+        support_dependence_note = (
+            "Support usage lowers confidence in fully independent mock readiness."
+        )
+
+    follow_up_handling_note = "Follow-up handling still needs a more concrete identifier strategy."
+    if _contains_any(
+        follow_up_metrics["normalized_text"],
+        ["counter", "random", "collision", "base62"],
+    ):
+        follow_up_handling_note = (
+            "Follow-up handling stayed concrete enough to defend the identifier strategy."
+        )
+
+    return {
+        "strengths": strengths,
+        "missed_dimensions": missed_dimensions,
+        "shallow_areas": shallow_areas,
+        "next_focus_suggestion": next_focus_suggestion,
+        "support_dependence_note": support_dependence_note,
+        "follow_up_handling_note": follow_up_handling_note,
+    }
+
+
 def _strength_line(criterion_id: str) -> str:
     if criterion_id == "concept_explanation":
         return "The answer explains the concept itself in working terms."
@@ -533,6 +1126,16 @@ def _strength_line(criterion_id: str) -> str:
         return "The answer surfaces concrete trade-offs instead of only benefits."
     if criterion_id == "communication_clarity":
         return "The answer is structured and easy to follow."
+    if criterion_id == "requirements_understanding":
+        return "The answer keeps the read-heavy and availability requirements in scope."
+    if criterion_id == "decomposition_quality":
+        return "The answer decomposes the system into concrete responsibilities."
+    if criterion_id == "data_and_storage_choices":
+        return "The answer names a plausible mapping store and access path."
+    if criterion_id == "scaling_strategy":
+        return "The answer explains how the redirect path scales under read-heavy load."
+    if criterion_id == "reliability_awareness":
+        return "The answer surfaces correctness or availability risks worth defending."
     raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
 
 
@@ -545,6 +1148,16 @@ def _shallow_line(criterion_id: str) -> str:
         return "The answer gestures at trade-offs without making the downsides concrete."
     if criterion_id == "communication_clarity":
         return "The answer is readable, but the structure could be sharper."
+    if criterion_id == "requirements_understanding":
+        return "The workload requirements are implied, but not stated clearly enough."
+    if criterion_id == "decomposition_quality":
+        return "The design mentions pieces, but not in a stable system shape."
+    if criterion_id == "data_and_storage_choices":
+        return "Storage and mapping choices are still too generic."
+    if criterion_id == "scaling_strategy":
+        return "The answer hints at scaling, but the read path is not defended clearly."
+    if criterion_id == "reliability_awareness":
+        return "Reliability and correctness risks are still shallow."
     raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
 
 
@@ -557,11 +1170,39 @@ def _dimension_label(criterion_id: str) -> str:
         return "the main trade-offs"
     if criterion_id == "communication_clarity":
         return "clear answer structure"
+    if criterion_id == "requirements_understanding":
+        return "requirements understanding"
+    if criterion_id == "decomposition_quality":
+        return "system decomposition"
+    if criterion_id == "data_and_storage_choices":
+        return "data and storage choices"
+    if criterion_id == "scaling_strategy":
+        return "scaling strategy"
+    if criterion_id == "reliability_awareness":
+        return "reliability awareness"
     raise RuleFirstEvaluationError("unsupported criterion_id: {0}".format(criterion_id))
 
 
 def _contains_any(text: str, candidates: list[str]) -> bool:
     return any(candidate in text for candidate in candidates)
+
+
+def _marker_hits(text: str, candidates: list[str]) -> int:
+    return sum(1 for candidate in candidates if candidate in text)
+
+
+def _score_from_count(count: int) -> int:
+    if count >= 3:
+        return 3
+    if count == 2:
+        return 2
+    if count == 1:
+        return 1
+    return 0
+
+
+def _evidence_lines(candidates: list[tuple[str, bool]]) -> list[str]:
+    return [line for line, matched in candidates if matched]
 
 
 def _deterministic_id(prefix: str, request: dict[str, Any]) -> str:

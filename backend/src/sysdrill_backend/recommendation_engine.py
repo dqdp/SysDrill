@@ -13,6 +13,7 @@ _ACTION_PAIR_ORDER = {
     ("Study", "SpacedReview"): 2,
     ("Practice", "Reinforce"): 3,
     ("Practice", "Remediate"): 4,
+    ("MockInterview", "ReadinessCheck"): 5,
 }
 
 
@@ -167,12 +168,16 @@ class RecommendationEngine:
                 target_id = option.get("content_id")
                 if not isinstance(target_id, str) or not target_id:
                     continue
+                action_target_type = "concept"
+                if (mode, session_intent) == ("MockInterview", "ReadinessCheck"):
+                    target_id = _scenario_family_from_content_id(target_id)
+                    action_target_type = "scenario_family"
                 records.append(
                     {
                         "action": {
                             "mode": mode,
                             "session_intent": session_intent,
-                            "target_type": "concept",
+                            "target_type": action_target_type,
                             "target_id": target_id,
                             "difficulty_profile": option["effective_difficulty"],
                             "strictness_profile": _strictness_profile(mode),
@@ -199,6 +204,7 @@ class RecommendationEngine:
         subskill_state = recommendation_context["subskill_state"]
         latest_outcomes = recommendation_context["latest_outcomes"]
         recent_patterns = recommendation_context["recent_accepted_patterns"]
+        trajectory_state = recommendation_context["trajectory_state"]
         seen_targets = set(concept_state)
 
         learn_new_targets = {
@@ -233,6 +239,23 @@ class RecommendationEngine:
 
         if not filtered_records:
             raise NoRecommendationCandidatesError("no recommendation candidates are available")
+
+        mock_record = self._eligible_mock_record(
+            filtered_records=filtered_records,
+            concept_state=concept_state,
+            trajectory_state=trajectory_state,
+        )
+        if mock_record is None:
+            filtered_records = [
+                record
+                for record in filtered_records
+                if (
+                    record["action"]["mode"] != "MockInterview"
+                    or record["action"]["session_intent"] != "ReadinessCheck"
+                )
+            ]
+            if not filtered_records:
+                raise NoRecommendationCandidatesError("no recommendation candidates are available")
 
         weak_targets = []
         reinforce_targets = []
@@ -364,6 +387,25 @@ class RecommendationEngine:
                 alternatives_summary=(
                     "Study actions remain available, but the current recommendation "
                     "prefers one tighter reinforcement pass first."
+                ),
+            )
+
+        if mock_record is not None:
+            return self._decision_payload(
+                candidate_records=filtered_records,
+                chosen_record=mock_record,
+                supporting_signals=[
+                    "mock_readiness_threshold_met",
+                    "bounded_readiness_check_unlocked",
+                ],
+                blocking_signals=blocking_signals,
+                rationale=(
+                    "Use MockInterview / ReadinessCheck on '{0}' because readiness "
+                    "signals are strong enough for a bounded mock pass."
+                ).format(mock_record["target_title"]),
+                alternatives_summary=(
+                    "Study and practice remain available, but the current learner "
+                    "trajectory is ready for one bounded readiness check."
                 ),
             )
 
@@ -537,6 +579,32 @@ class RecommendationEngine:
             )
         return decision
 
+    def _eligible_mock_record(
+        self,
+        filtered_records: list[dict[str, Any]],
+        concept_state: dict[str, dict[str, Any]],
+        trajectory_state: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        mock_records = [
+            record
+            for record in filtered_records
+            if (
+                record["action"]["mode"] == "MockInterview"
+                and record["action"]["session_intent"] == "ReadinessCheck"
+            )
+        ]
+        if not mock_records:
+            return None
+        if _metric(trajectory_state, "mock_readiness_estimate") < 0.30:
+            return None
+        if _metric(trajectory_state, "mock_readiness_confidence") < 0.20:
+            return None
+        if _metric(trajectory_state, "recent_abandonment_signal") >= 0.25:
+            return None
+        if _average_hint_dependency_signal(concept_state) >= 0.20:
+            return None
+        return mock_records[0]
+
     def _next_decision_id(self) -> str:
         self._decision_counter += 1
         return "rec.{0:04d}".format(self._decision_counter)
@@ -619,3 +687,23 @@ def _timestamp_sort_key(value: Any) -> tuple[int, str]:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return (0, parsed.astimezone(timezone.utc).isoformat())
+
+
+def _average_hint_dependency_signal(concept_state: dict[str, dict[str, Any]]) -> float:
+    hint_signals = [
+        _metric(summary, "hint_dependency_signal")
+        for summary in concept_state.values()
+        if isinstance(summary, dict)
+    ]
+    if not hint_signals:
+        return 0.0
+    return sum(hint_signals) / len(hint_signals)
+
+
+def _scenario_family_from_content_id(content_id: str) -> str:
+    tokens = content_id.split(".")
+    if len(tokens) < 3 or tokens[0] != "scenario":
+        raise RecommendationEngineError(
+            "mock recommendation content_id is not a scenario id: {0}".format(content_id)
+        )
+    return tokens[1].replace("-", "_")

@@ -61,6 +61,12 @@ const LAUNCH_PROFILES = [
     label: "Practice / Remediate",
     description: "Targeted concept-recall remediation with lower support.",
   },
+  {
+    mode: "MockInterview",
+    sessionIntent: "ReadinessCheck",
+    label: "Mock Interview / Readiness Check",
+    description: "One bounded scenario pass with a single follow-up probe.",
+  },
 ] as const;
 
 type Phase = "launcher" | "session" | "submitting" | "review";
@@ -619,13 +625,32 @@ export function App() {
 
     setSessionError("");
     setPhase("submitting");
-    let submissionAccepted = answerSubmitted;
+    let finalSubmissionAccepted = answerSubmitted;
 
     try {
-      if (!submissionAccepted) {
-        await submitAnswer(sessionId, transcript);
-        submissionAccepted = true;
+      if (!answerSubmitted) {
+        const submissionResponse = await submitAnswer(sessionId, transcript);
+        if (submissionResponse.state === "follow_up_round") {
+          const nextPrompt = submissionResponse.current_unit?.visible_prompt;
+          if (!nextPrompt) {
+            throw new Error("Follow-up round started without a visible prompt.");
+          }
+          startTransition(() => {
+            setAnswerSubmitted(false);
+            setVisiblePrompt(nextPrompt);
+            setTranscript("");
+            setPhase("session");
+          });
+          return;
+        }
+        if (submissionResponse.state !== "evaluation_pending") {
+          throw new Error(
+            `Unsupported session state after submission: ${submissionResponse.state}`,
+          );
+        }
+        finalSubmissionAccepted = true;
       }
+
       const evaluateResponse = await evaluateOrLoadReview(sessionId);
 
       startTransition(() => {
@@ -635,7 +660,7 @@ export function App() {
       });
     } catch (error) {
       startTransition(() => {
-        setAnswerSubmitted(submissionAccepted);
+        setAnswerSubmitted(finalSubmissionAccepted);
         setSessionError(errorMessage(error));
         setPhase("session");
       });
@@ -1038,6 +1063,11 @@ export function App() {
                 <article className="review-card emphasis">
                   <p className="panel-label">Next focus</p>
                   <p>{review.review_report.recommended_next_focus}</p>
+                  {review.review_report.follow_up_handling_note ? (
+                    <p className="support-note">
+                      {review.review_report.follow_up_handling_note}
+                    </p>
+                  ) : null}
                   {review.review_report.support_dependence_note ? (
                     <p className="support-note">
                       {review.review_report.support_dependence_note}
@@ -1154,7 +1184,8 @@ function isPreAnswerState(state: string): boolean {
     state === "planned" ||
     state === "started" ||
     state === "unit_presented" ||
-    state === "awaiting_answer"
+    state === "awaiting_answer" ||
+    state === "follow_up_round"
   );
 }
 

@@ -437,6 +437,92 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertEqual(decision["chosen_action"]["session_intent"], "Remediate")
         self.assertIn("weak", decision["rationale"].lower())
 
+    def test_next_recommendation_unlocks_mock_when_readiness_is_high_enough(self):
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.71,
+                            "review_due_risk": 0.2,
+                            "hint_dependency_signal": 0.05,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.76,
+                            "confidence": 0.68,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                        "communication_clarity": {
+                            "proficiency_estimate": 0.74,
+                            "confidence": 0.67,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.05,
+                        "recent_abandonment_signal": 0.1,
+                        "mock_readiness_estimate": 0.32,
+                        "mock_readiness_confidence": 0.21,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "MockInterview")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "ReadinessCheck")
+        self.assertEqual(decision["chosen_action"]["target_type"], "scenario_family")
+        self.assertEqual(decision["chosen_action"]["target_id"], "url_shortener")
+        self.assertIn("readiness", decision["rationale"].lower())
+
+    def test_next_recommendation_suppresses_mock_when_hint_dependency_is_too_high(self):
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {
+                        "concept.alpha-topic": {
+                            "proficiency_estimate": 0.82,
+                            "confidence": 0.71,
+                            "review_due_risk": 0.2,
+                            "hint_dependency_signal": 0.24,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.76,
+                            "confidence": 0.68,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.05,
+                        "recent_abandonment_signal": 0.1,
+                        "mock_readiness_estimate": 0.34,
+                        "mock_readiness_confidence": 0.22,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "SpacedReview")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -369,6 +369,109 @@ class SessionRuntimeServiceTest(unittest.TestCase):
                 reveal_kind="canonical_answer",
             )
 
+    def test_mock_primary_answer_presents_first_follow_up_deterministically(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+
+        result = self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would begin with the redirect path, key generation, and a "
+                "mapping store because the service is read-heavy."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+            response_latency_ms=51000,
+        )
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(result["session"]["state"], "follow_up_round")
+        self.assertEqual(
+            result["session"]["current_unit"]["visible_prompt"],
+            ("How would you generate short identifiers without creating avoidable collisions?"),
+        )
+        self.assertIsNone(result.get("evaluation_request"))
+        self.assertEqual(
+            [event["event_type"] for event in events[-2:]],
+            ["answer_submitted", "follow_up_presented"],
+        )
+
+    def test_mock_follow_up_submission_builds_scenario_bound_evaluation_request(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would start with a redirect API, key generation, and durable "
+                "storage because the workload is read-heavy."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+            response_latency_ms=51000,
+        )
+
+        result = self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "I would use a counter or random-id strategy with collision "
+                "checks and reserve room for cache-backed redirect reads."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+            response_latency_ms=26000,
+        )
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(result["session"]["state"], "evaluation_pending")
+        self.assertEqual(
+            [event["event_type"] for event in events[-2:]],
+            ["follow_up_answered", "answer_submitted"],
+        )
+        self.assertEqual(result["evaluation_request"]["binding_id"], "binding.url_shortener.v1")
+        self.assertEqual(result["evaluation_request"]["unit_family"], "scenario_readiness_check")
+        self.assertEqual(result["evaluation_request"]["scenario_family"], "url_shortener")
+        self.assertIn(
+            "I would start with a redirect API",
+            result["evaluation_request"]["transcript_text"],
+        )
+        self.assertEqual(
+            result["evaluation_request"]["follow_up_transcript_text"],
+            (
+                "I would use a counter or random-id strategy with collision "
+                "checks and reserve room for cache-backed redirect reads."
+            ),
+        )
+
+    def test_mock_hint_policy_is_stricter_than_practice(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+
+        first_hint = self.runtime.request_hint(
+            session_id=session["session_id"],
+            hint_level=1,
+            reason="need_more_guidance",
+        )
+
+        self.assertEqual(first_hint["hint_level"], 1)
+        with self.assertRaisesRegex(SessionRuntimeError, "not allowed"):
+            self.runtime.request_hint(
+                session_id=session["session_id"],
+                hint_level=2,
+                reason="need_even_more_guidance",
+            )
+
     def test_evaluate_pending_session_fails_closed_from_wrong_state(self):
         session = self.runtime.start_manual_session(
             user_id="user-1",
@@ -826,6 +929,10 @@ class SessionRuntimeApiTest(unittest.TestCase):
             create_app(content_export_root=export_root, allow_draft_bundles=True)
         )
         self.study_unit_id = "elu.concept_recall.study.learn_new.concept.alpha-topic"
+        self.mock_unit_id = (
+            "elu.scenario_readiness_check.mock_interview.readiness_check."
+            "scenario.url-shortener.basic"
+        )
 
     def test_manual_start_endpoint_returns_session_snapshot(self):
         response = self.client.post(
@@ -1103,6 +1210,39 @@ class SessionRuntimeApiTest(unittest.TestCase):
         self.assertEqual(payload["evaluation_request"]["binding_id"], "binding.concept_recall.v1")
         self.assertEqual(payload["evaluation_request"]["unit_family"], "concept_recall")
 
+    def test_mock_answer_submission_endpoint_returns_follow_up_before_evaluation(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "user-1",
+                "mode": "MockInterview",
+                "session_intent": "ReadinessCheck",
+                "unit_id": self.mock_unit_id,
+            },
+        )
+        session_id = start_response.json()["session_id"]
+
+        response = self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": (
+                    "I would start with redirect reads, durable mapping storage, "
+                    "and short-id generation."
+                ),
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["state"], "follow_up_round")
+        self.assertEqual(
+            payload["current_unit"]["visible_prompt"],
+            ("How would you generate short identifiers without creating avoidable collisions?"),
+        )
+        self.assertNotIn("evaluation_request", payload)
+
     def test_answer_submission_endpoint_rejects_invalid_payload_with_422(self):
         start_response = self.client.post(
             "/runtime/sessions/manual-start",
@@ -1171,6 +1311,48 @@ class SessionRuntimeApiTest(unittest.TestCase):
         self.assertEqual(payload["state"], "review_presented")
         self.assertIn("evaluation_result", payload)
         self.assertIn("review_report", payload)
+
+    def test_mock_evaluate_endpoint_returns_scenario_bound_review(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "user-1",
+                "mode": "MockInterview",
+                "session_intent": "ReadinessCheck",
+                "unit_id": self.mock_unit_id,
+            },
+        )
+        session_id = start_response.json()["session_id"]
+        self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": (
+                    "I would start with redirect reads, durable mapping storage, "
+                    "and short-id generation."
+                ),
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+        self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": (
+                    "I would generate ids with a counter or random strategy plus "
+                    "collision checks and cache the redirect path."
+                ),
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+
+        response = self.client.post("/runtime/sessions/{0}/evaluate".format(session_id))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["state"], "review_presented")
+        self.assertEqual(payload["evaluation_result"]["binding_id"], "binding.url_shortener.v1")
+        self.assertIn("follow_up_handling_note", payload["review_report"])
 
     def test_get_review_endpoint_returns_review_after_evaluation(self):
         start_response = self.client.post(

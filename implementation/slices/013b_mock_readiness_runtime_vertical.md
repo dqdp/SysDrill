@@ -2,7 +2,7 @@
 
 ## Status
 
-- planned
+- in_progress
 
 ## Execution posture
 
@@ -64,6 +64,16 @@ framework.
 - readiness unlock should remain conservative and explainable
 - review output may be richer than concept recall, but must stay bounded and
   deterministic
+
+Frozen for implementation:
+- the single follow-up prompt is chosen deterministically as the first item in
+  `canonical_follow_up_candidates`
+- mock unlock requires at least:
+  - `mock_readiness_estimate >= 0.30`
+  - `mock_readiness_confidence >= 0.20`
+- mock is suppressed when:
+  - `recent_abandonment_signal >= 0.25`, or
+  - average concept `hint_dependency_signal >= 0.20`
 
 ## Architectural approaches considered
 
@@ -144,7 +154,7 @@ Write tests first.
 ### Test file contract
 
 - `backend/tests/test_session_runtime.py`
-  Runtime behavior for mock start, support policy, follow-up cap, and closure.
+  Runtime behavior plus API-level runtime/evaluation transitions for the new mock path.
 - `backend/tests/test_recommendation_engine.py`
   Conservative mock unlock and suppression behavior.
 - `backend/tests/test_smoke_backend_loop.py`

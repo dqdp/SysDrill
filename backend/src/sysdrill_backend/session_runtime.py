@@ -9,7 +9,7 @@ from sysdrill_backend.executable_learning_unit_materializer import (
 )
 from sysdrill_backend.rule_first_evaluator import (
     RuleFirstEvaluationError,
-    evaluate_concept_recall,
+    evaluate_request,
 )
 
 
@@ -67,7 +67,7 @@ class SessionRuntime:
         self._units_by_mode_intent: dict[tuple[str, str], dict[str, dict[str, Any]]] = {}
         self._unit_owner_by_id: dict[str, tuple[str, str]] = {}
         self._content_metadata_by_id = self._build_content_metadata_by_id(catalog)
-        self._evaluator = evaluate_concept_recall if evaluator is None else evaluator
+        self._evaluator = evaluate_request if evaluator is None else evaluator
 
         with self._state_lock:
             for mode, session_intent in supported_materialization_pairs():
@@ -150,6 +150,8 @@ class SessionRuntime:
             "hint_count_for_unit": 0,
             "answer_reveal_count_for_unit": 0,
             "answer_reveal_flag": False,
+            "primary_transcript_text": None,
+            "follow_up_transcript_text": None,
             "session_started_at": None,
             "recommendation_decision_id": (
                 recommendation_context["decision_id"] if recommendation_context else None
@@ -458,11 +460,69 @@ class SessionRuntime:
     ) -> dict[str, Any]:
         with self._state_lock:
             session = self._require_session(session_id)
-            if session["state"] != "awaiting_answer":
+            if session["state"] not in {"awaiting_answer", "follow_up_round"}:
                 raise SessionRuntimeInvalidStateError(
                     "cannot submit answer when session state is '{0}'".format(session["state"])
                 )
             self._validate_submission_kind(session, submission_kind)
+            unit_family = self._unit_family(session["current_unit"])
+
+            if (
+                session["state"] == "awaiting_answer"
+                and unit_family == "scenario_readiness_check"
+                and self._has_remaining_follow_up(session)
+            ):
+                session["state"] = "submitted"
+                self._emit_event(
+                    session,
+                    "answer_submitted",
+                    {
+                        "response_modality": response_modality,
+                        "char_count": len(transcript),
+                        "response_latency_ms": response_latency_ms,
+                        "submission_kind": submission_kind,
+                        "used_prior_hints": session["hint_count_for_unit"] > 0,
+                        "follow_up_context": False,
+                    },
+                )
+                follow_up_prompt = self._next_follow_up_prompt(session["current_unit"])
+                session["primary_transcript_text"] = transcript
+                session["current_unit"]["visible_prompt"] = follow_up_prompt
+                session["state"] = "follow_up_round"
+                self._emit_event(
+                    session,
+                    "follow_up_presented",
+                    {
+                        "follow_up_prompt": follow_up_prompt,
+                        "follow_up_index": 1,
+                    },
+                )
+                return {
+                    "session": self.get_session(session_id),
+                    "submitted_unit_id": session["current_unit_id"],
+                    "evaluation_request": None,
+                }
+
+            if session["state"] == "follow_up_round":
+                follow_up_context = True
+                self._emit_event(
+                    session,
+                    "follow_up_answered",
+                    {
+                        "response_modality": response_modality,
+                        "char_count": len(transcript),
+                        "response_latency_ms": response_latency_ms,
+                        "submission_kind": submission_kind,
+                        "used_prior_hints": session["hint_count_for_unit"] > 0,
+                    },
+                )
+                session["follow_up_transcript_text"] = transcript
+                transcript_text = session.get("primary_transcript_text")
+                if not isinstance(transcript_text, str) or not transcript_text:
+                    raise SessionRuntimeError("primary transcript is missing for follow-up answer")
+            else:
+                follow_up_context = False
+                transcript_text = transcript
 
             session["state"] = "submitted"
             self._emit_event(
@@ -474,29 +534,16 @@ class SessionRuntime:
                     "response_latency_ms": response_latency_ms,
                     "submission_kind": submission_kind,
                     "used_prior_hints": session["hint_count_for_unit"] > 0,
-                    "follow_up_context": False,
+                    "follow_up_context": follow_up_context,
                 },
             )
 
-            evaluation_request = {
-                "session_id": session_id,
-                "session_mode": session["mode"],
-                "session_intent": session["session_intent"],
-                "executable_unit_id": session["current_unit_id"],
-                "unit_family": self._unit_family(session["current_unit"]),
-                "binding_id": session["current_unit"]["evaluation_binding_id"],
-                "transcript_text": transcript,
-                "hint_usage_summary": {
-                    "hint_count": session["hint_count_for_unit"],
-                    "used_prior_hints": session["hint_count_for_unit"] > 0,
-                },
-                "answer_reveal_flag": session["answer_reveal_flag"],
-                "timing_summary": {
-                    "response_latency_ms": response_latency_ms,
-                },
-                "completion_status": "submitted",
-                "strictness_profile": session["strictness_profile"],
-            }
+            evaluation_request = self._build_evaluation_request(
+                session=session,
+                transcript_text=transcript_text,
+                follow_up_transcript_text=session.get("follow_up_transcript_text"),
+                response_latency_ms=response_latency_ms,
+            )
             session["last_evaluation_request"] = copy.deepcopy(evaluation_request)
             session["state"] = "evaluation_pending"
 
@@ -604,7 +651,7 @@ class SessionRuntime:
             raise SessionRuntimeError("recommendation action must be an object")
 
         target_type = action.get("target_type")
-        if target_type != "concept":
+        if target_type not in {"concept", "scenario_family"}:
             raise SessionRuntimeError(
                 "unsupported recommendation action target_type: {0}".format(target_type)
             )
@@ -640,9 +687,14 @@ class SessionRuntime:
                 )
             )
 
-        matching_units = [
-            unit for unit in units.values() if target_id in unit.get("source_content_ids", [])
-        ]
+        if target_type == "concept":
+            matching_units = [
+                unit for unit in units.values() if target_id in unit.get("source_content_ids", [])
+            ]
+        else:
+            matching_units = [
+                unit for unit in units.values() if unit.get("scenario_family") == target_id
+            ]
         if not matching_units:
             raise SessionRuntimeError(
                 "recommendation action target_id '{0}' is not currently resolvable".format(
@@ -765,10 +817,62 @@ class SessionRuntime:
         return max(0, int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000))
 
     def _unit_family(self, unit: dict[str, Any]) -> str:
+        configured_unit_family = unit.get("unit_family")
+        if isinstance(configured_unit_family, str) and configured_unit_family:
+            return configured_unit_family
         unit_id = unit.get("id")
         if isinstance(unit_id, str) and unit_id.startswith("elu.concept_recall."):
             return "concept_recall"
         raise SessionRuntimeError("unable to derive unit_family for unit_id: {0}".format(unit_id))
+
+    def _has_remaining_follow_up(self, session: dict[str, Any]) -> bool:
+        follow_up_envelope = session["current_unit"].get("follow_up_envelope")
+        if not isinstance(follow_up_envelope, dict):
+            return False
+        max_follow_ups = follow_up_envelope.get("max_follow_ups", 0)
+        if not isinstance(max_follow_ups, int) or max_follow_ups <= 0:
+            return False
+        return not isinstance(session.get("primary_transcript_text"), str)
+
+    def _next_follow_up_prompt(self, unit: dict[str, Any]) -> str:
+        candidates = unit.get("canonical_follow_up_candidates")
+        if not isinstance(candidates, list) or not candidates:
+            raise SessionRuntimeError("current unit follow-up candidates are missing")
+        prompt = candidates[0]
+        if not isinstance(prompt, str) or not prompt:
+            raise SessionRuntimeError("current unit follow-up candidate is invalid")
+        return prompt
+
+    def _build_evaluation_request(
+        self,
+        session: dict[str, Any],
+        transcript_text: str,
+        follow_up_transcript_text: str | None,
+        response_latency_ms: int | None,
+    ) -> dict[str, Any]:
+        evaluation_request = {
+            "session_id": session["session_id"],
+            "session_mode": session["mode"],
+            "session_intent": session["session_intent"],
+            "executable_unit_id": session["current_unit_id"],
+            "unit_family": self._unit_family(session["current_unit"]),
+            "binding_id": session["current_unit"]["evaluation_binding_id"],
+            "transcript_text": transcript_text,
+            "hint_usage_summary": {
+                "hint_count": session["hint_count_for_unit"],
+                "used_prior_hints": session["hint_count_for_unit"] > 0,
+            },
+            "answer_reveal_flag": session["answer_reveal_flag"],
+            "timing_summary": {
+                "response_latency_ms": response_latency_ms,
+            },
+            "completion_status": "submitted",
+            "strictness_profile": session["strictness_profile"],
+        }
+        if evaluation_request["unit_family"] == "scenario_readiness_check":
+            evaluation_request["scenario_family"] = session["current_unit"]["scenario_family"]
+            evaluation_request["follow_up_transcript_text"] = follow_up_transcript_text
+        return evaluation_request
 
     def _next_session_id(self) -> str:
         self._session_counter += 1
