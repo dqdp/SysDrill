@@ -295,6 +295,37 @@ class ExecutableLearningUnitMaterializerTest(unittest.TestCase):
                 session_intent="ReadinessCheck",
             )
 
+    def test_mock_materialization_fails_closed_for_unknown_bound_concept_id(self):
+        catalog = copy.deepcopy(self.catalog)
+        catalog["url-shortener"]["topic_package"]["canonical_content"]["scenarios"][0][
+            "bound_concept_ids"
+        ] = ["concept.missing"]
+
+        with self.assertRaisesRegex(
+            ExecutableLearningUnitMaterializationError,
+            "unknown concept id",
+        ):
+            materialize_executable_learning_units(
+                catalog,
+                mode="MockInterview",
+                session_intent="ReadinessCheck",
+            )
+
+    def test_mock_materialization_tolerates_missing_bound_concept_ids(self):
+        catalog = copy.deepcopy(self.catalog)
+        del catalog["url-shortener"]["topic_package"]["canonical_content"]["scenarios"][0][
+            "bound_concept_ids"
+        ]
+
+        units = materialize_executable_learning_units(
+            catalog,
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+        )
+
+        self.assertEqual(len(units), 1)
+        self.assertNotIn("bound_concept_ids", units[0])
+
     def test_skips_topics_without_recall_candidate_type(self):
         catalog = copy.deepcopy(self.catalog)
         catalog["alpha-topic"]["topic_package"]["learning_design_drafts"][

@@ -224,16 +224,6 @@ def _concept_evidence_point(
     evaluation_result: dict[str, Any],
     evidence_at: str,
 ) -> dict[str, Any]:
-    current_unit = session.get("current_unit")
-    if (
-        isinstance(current_unit, dict)
-        and current_unit.get("unit_family") == "scenario_readiness_check"
-    ):
-        return _scenario_concept_evidence_point(
-            evaluation_result=evaluation_result,
-            evidence_at=evidence_at,
-        )
-
     criterion_results = _criterion_results_by_id(evaluation_result)
     concept_explanation = _normalized_score(criterion_results.get("concept_explanation"))
     usage_judgment = _normalized_score(criterion_results.get("usage_judgment"))
@@ -248,35 +238,6 @@ def _concept_evidence_point(
             concept_score * mode_weight * (1.0 - 0.25 * support_hint_dependency)
         ),
         "overall_confidence": _clamp(float(evaluation_result.get("overall_confidence", 0.0))),
-        "hint_dependency": support_hint_dependency,
-        "evidence_at": evidence_at,
-    }
-
-
-def _scenario_concept_evidence_point(
-    evaluation_result: dict[str, Any],
-    evidence_at: str,
-) -> dict[str, Any]:
-    criterion_results = _criterion_results_by_id(evaluation_result)
-    support_hint_dependency = _hint_dependency(evaluation_result)
-    scenario_concept_score = _weighted_normalized_criterion_score(
-        criterion_results=criterion_results,
-        criterion_weights={
-            "requirements_understanding": 0.7,
-            "data_and_storage_choices": 1.2,
-            "scaling_strategy": 1.1,
-            "trade_off_articulation": 1.0,
-        },
-    )
-
-    return {
-        "weight": 0.75,
-        "proficiency_signal": _clamp(
-            scenario_concept_score * 0.82 * (1.0 - 0.2 * support_hint_dependency)
-        ),
-        "overall_confidence": _clamp(
-            float(evaluation_result.get("overall_confidence", 0.0)) * 0.78
-        ),
         "hint_dependency": support_hint_dependency,
         "evidence_at": evidence_at,
     }
@@ -352,22 +313,6 @@ def _hint_dependency(evaluation_result: dict[str, Any]) -> float:
     return _clamp(float(value))
 
 
-def _weighted_normalized_criterion_score(
-    criterion_results: dict[str, dict[str, Any]],
-    criterion_weights: dict[str, float],
-) -> float:
-    weighted_sum = 0.0
-    total_weight = 0.0
-    for criterion_id, weight in criterion_weights.items():
-        if not isinstance(weight, (int, float)) or float(weight) <= 0.0:
-            continue
-        weighted_sum += float(weight) * _normalized_score(criterion_results.get(criterion_id))
-        total_weight += float(weight)
-    if total_weight == 0.0:
-        return 0.0
-    return _clamp(weighted_sum / total_weight)
-
-
 def _weighted_average(evidence_points: list[dict[str, Any]], field: str) -> float:
     weighted_sum = 0.0
     total_weight = 0.0
@@ -402,14 +347,7 @@ def _session_concept_targets(session: dict[str, Any]) -> list[str]:
     if not isinstance(current_unit, dict):
         return []
     if current_unit.get("unit_family") == "scenario_readiness_check":
-        bound_concept_ids = current_unit.get("bound_concept_ids", [])
-        if not isinstance(bound_concept_ids, list):
-            return []
-        return [
-            content_id
-            for content_id in bound_concept_ids
-            if isinstance(content_id, str) and content_id
-        ]
+        return []
     source_content_ids = current_unit.get("source_content_ids", [])
     if not isinstance(source_content_ids, list) or not source_content_ids:
         return []

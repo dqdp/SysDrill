@@ -295,6 +295,47 @@ def _scenario_binding_metadata(scenario_id: str) -> dict[str, str]:
     return binding
 
 
+def _catalog_concept_ids(catalog: dict[str, dict[str, Any]]) -> set[str]:
+    concept_ids: set[str] = set()
+    for bundle in catalog.values():
+        topic_package = bundle.get("topic_package", {})
+        canonical_content = topic_package.get("canonical_content")
+        if not isinstance(canonical_content, dict):
+            continue
+        concepts = canonical_content.get("concepts", [])
+        if not isinstance(concepts, list):
+            continue
+        for concept in concepts:
+            if not isinstance(concept, dict):
+                continue
+            concept_id = _optional_non_empty_string(concept, "id")
+            if concept_id is not None:
+                concept_ids.add(concept_id)
+    return concept_ids
+
+
+def _validated_bound_concept_ids(
+    scenario: dict[str, Any],
+    topic_slug: str,
+    scenario_index: int,
+    known_concept_ids: set[str],
+) -> list[str]:
+    bound_concept_ids = _optional_non_empty_string_list(scenario, "bound_concept_ids")
+    unknown_concept_ids = [
+        concept_id for concept_id in bound_concept_ids if concept_id not in known_concept_ids
+    ]
+    if unknown_concept_ids:
+        raise ExecutableLearningUnitMaterializationError(
+            "scenario field 'bound_concept_ids' contains unknown concept id(s) {0} "
+            "for topic '{1}' scenario index {2}".format(
+                sorted(unknown_concept_ids),
+                topic_slug,
+                scenario_index,
+            )
+        )
+    return bound_concept_ids
+
+
 def _materialize_concept_recall_units(
     catalog: dict[str, dict[str, Any]],
     mode: str,
@@ -341,6 +382,7 @@ def _materialize_scenario_readiness_units(
     session_intent: str,
 ) -> list[dict[str, Any]]:
     units = []
+    known_concept_ids = _catalog_concept_ids(catalog)
 
     for topic_slug in sorted(catalog):
         bundle = catalog[topic_slug]
@@ -409,34 +451,33 @@ def _materialize_scenario_readiness_units(
                 scenario_index,
                 record_kind="scenario",
             )
-            bound_concept_ids = _required_non_empty_string_list(
+            bound_concept_ids = _validated_bound_concept_ids(
                 scenario,
-                "bound_concept_ids",
                 topic_slug,
                 scenario_index,
-                record_kind="scenario",
+                known_concept_ids,
             )
             binding = _scenario_binding_metadata(scenario_id)
-            units.append(
-                {
-                    "id": _scenario_readiness_unit_id(mode, session_intent, scenario_id),
-                    "source_content_ids": [scenario_id],
-                    "mode": mode,
-                    "session_intent": session_intent,
-                    "unit_family": _SCENARIO_READINESS_UNIT_FAMILY,
-                    "scenario_family": binding["scenario_family"],
-                    "scenario_title": scenario_title,
-                    "visible_prompt": scenario_prompt,
-                    "bound_concept_ids": bound_concept_ids,
-                    "canonical_follow_up_candidates": canonical_follow_up_candidates,
-                    "pedagogical_goal": _SCENARIO_READINESS_PEDAGOGICAL_GOAL,
-                    "effective_difficulty": effective_difficulty,
-                    "allowed_hint_levels": list(_SCENARIO_READINESS_POLICY["allowed_hint_levels"]),
-                    "follow_up_envelope": dict(_SCENARIO_READINESS_POLICY["follow_up_envelope"]),
-                    "completion_rules": dict(_SCENARIO_READINESS_POLICY["completion_rules"]),
-                    "evaluation_binding_id": binding["evaluation_binding_id"],
-                }
-            )
+            unit = {
+                "id": _scenario_readiness_unit_id(mode, session_intent, scenario_id),
+                "source_content_ids": [scenario_id],
+                "mode": mode,
+                "session_intent": session_intent,
+                "unit_family": _SCENARIO_READINESS_UNIT_FAMILY,
+                "scenario_family": binding["scenario_family"],
+                "scenario_title": scenario_title,
+                "visible_prompt": scenario_prompt,
+                "canonical_follow_up_candidates": canonical_follow_up_candidates,
+                "pedagogical_goal": _SCENARIO_READINESS_PEDAGOGICAL_GOAL,
+                "effective_difficulty": effective_difficulty,
+                "allowed_hint_levels": list(_SCENARIO_READINESS_POLICY["allowed_hint_levels"]),
+                "follow_up_envelope": dict(_SCENARIO_READINESS_POLICY["follow_up_envelope"]),
+                "completion_rules": dict(_SCENARIO_READINESS_POLICY["completion_rules"]),
+                "evaluation_binding_id": binding["evaluation_binding_id"],
+            }
+            if bound_concept_ids:
+                unit["bound_concept_ids"] = bound_concept_ids
+            units.append(unit)
 
     return units
 

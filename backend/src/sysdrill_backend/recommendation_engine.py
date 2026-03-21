@@ -220,14 +220,6 @@ class RecommendationEngine:
         unlocked_bound_targets = {
             target_id for target_id in seen_targets if target_id in scenario_bound_concept_ids
         }
-        if isinstance(recent_mock_feedback, dict):
-            bound_concept_ids = recent_mock_feedback.get("bound_concept_ids", [])
-            if isinstance(bound_concept_ids, list):
-                unlocked_bound_targets.update(
-                    target_id
-                    for target_id in bound_concept_ids
-                    if target_id in scenario_bound_concept_ids
-                )
 
         filtered_records = []
         for record in candidate_records:
@@ -327,46 +319,6 @@ class RecommendationEngine:
                 reinforce_targets.append(target_id)
 
         if weak_targets:
-            post_mock_bound_targets: list[str] = []
-            if isinstance(recent_mock_feedback, dict):
-                bound_concept_ids = recent_mock_feedback.get("bound_concept_ids", [])
-                if isinstance(bound_concept_ids, list):
-                    post_mock_bound_targets = [
-                        target_id for target_id in weak_targets if target_id in bound_concept_ids
-                    ]
-            if post_mock_bound_targets:
-                target_id = self._first_target_by_priority(
-                    targets=post_mock_bound_targets,
-                    concept_state=concept_state,
-                    metric="proficiency_estimate",
-                    reverse=False,
-                )
-                chosen_record = self._first_matching_record(
-                    filtered_records,
-                    target_id=target_id,
-                    mode="Practice",
-                    session_intent="Remediate",
-                )
-                return self._decision_payload(
-                    candidate_records=filtered_records,
-                    chosen_record=chosen_record,
-                    supporting_signals=[
-                        "post_mock_bound_concept_follow_up",
-                        "weak_reviewed_outcome",
-                        "bounded_remediation_priority",
-                    ],
-                    blocking_signals=blocking_signals,
-                    rationale=(
-                        "Choose Practice / Remediate on '{0}' because the latest "
-                        "reviewed mock exposed this bound concept as the safest next "
-                        "post-mock follow-up."
-                    ).format(chosen_record["target_title"]),
-                    alternatives_summary=(
-                        "Another mock is suppressed for now, and this bound concept "
-                        "follow-up is ranked above generic exploration after the recent "
-                        "mock attempt."
-                    ),
-                )
             target_id = self._first_target_by_priority(
                 targets=weak_targets,
                 concept_state=concept_state,
@@ -700,7 +652,6 @@ class RecommendationEngine:
         latest_mock_session_id = None
         latest_mock_session_at: tuple[int, str] | None = None
         latest_mock_state = None
-        latest_mock_bound_concept_ids: list[str] = []
 
         for session in self._runtime.list_user_sessions(user_id):
             session_id = session.get("session_id")
@@ -731,26 +682,12 @@ class RecommendationEngine:
             latest_mock_session_at = session_sort_key
             latest_mock_session_id = session_id
             latest_mock_state = session.get("state")
-            current_unit = session.get("current_unit")
-            if isinstance(current_unit, dict):
-                bound_concept_ids = current_unit.get("bound_concept_ids", [])
-                if isinstance(bound_concept_ids, list):
-                    latest_mock_bound_concept_ids = [
-                        concept_id
-                        for concept_id in bound_concept_ids
-                        if isinstance(concept_id, str) and concept_id
-                    ]
-                else:
-                    latest_mock_bound_concept_ids = []
 
         if latest_mock_session_id is None or latest_mock_session_id != latest_session_id:
             return None
         if latest_mock_state == "abandoned":
             return {"signal": "recent_mock_abandonment"}
-        return {
-            "signal": "recent_mock_attempt",
-            "bound_concept_ids": latest_mock_bound_concept_ids,
-        }
+        return {"signal": "recent_mock_attempt"}
 
     def _next_decision_id(self) -> str:
         self._decision_counter += 1

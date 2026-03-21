@@ -48,13 +48,63 @@ def _is_missing_draft_field(field_payload):
     return value is None
 
 
+def _draft_field_value(field_payload):
+    if not isinstance(field_payload, dict) or "value" not in field_payload:
+        return None
+    return field_payload["value"]
+
+
+def _normalized_string_list(field_payload):
+    value = _draft_field_value(field_payload)
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    normalized = []
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        item = strip_whitespace(item)
+        if item:
+            normalized.append(item)
+    return normalized
+
+
+def _known_concept_ids(draft):
+    concept_ids = set()
+    for concept in draft.get("concepts", []):
+        if not isinstance(concept, dict):
+            continue
+        concept_id = _draft_field_value(concept.get("id"))
+        if not isinstance(concept_id, str):
+            continue
+        concept_id = strip_whitespace(concept_id)
+        if concept_id:
+            concept_ids.add(concept_id)
+    return concept_ids
+
+
 def _validate_scenarios(draft, errors, missing_required_paths):
+    concept_ids = _known_concept_ids(draft)
     for index, scenario in enumerate(draft.get("scenarios", [])):
         for field in _SCENARIO_REQUIRED_FIELDS:
             if _is_missing_draft_field(scenario.get(field)):
                 path = "scenarios[{0}].{1}".format(index, field)
                 missing_required_paths.append(path)
                 errors.append("missing required scenario field: {0}".format(path))
+        bound_concept_ids = _normalized_string_list(scenario.get("bound_concept_ids"))
+        unknown_bound_concept_ids = [
+            concept_id for concept_id in bound_concept_ids if concept_id not in concept_ids
+        ]
+        if unknown_bound_concept_ids:
+            errors.append(
+                (
+                    "unknown scenario bound concept ids at scenarios[{0}].bound_concept_ids: {1}"
+                ).format(
+                    index,
+                    sorted(unknown_bound_concept_ids),
+                )
+            )
 
 
 def validate_semantic_draft(draft):

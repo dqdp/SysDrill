@@ -597,7 +597,72 @@ class RecommendationEngineTest(unittest.TestCase):
         self.assertNotEqual(decision["chosen_action"]["mode"], "MockInterview")
         self.assertIn("recent_mock_attempt", decision["blocking_signals"])
 
-    def test_next_recommendation_targets_bound_concept_follow_up_after_weak_mock(self):
+    def test_next_recommendation_does_not_unlock_bound_concepts_from_recent_mock_alone(self):
+        session = self.runtime.start_manual_session(
+            user_id="demo-user",
+            mode="MockInterview",
+            session_intent="ReadinessCheck",
+            unit_id=self.mock_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript="I would use a database and maybe some caching.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript="Maybe a counter for ids and scale later if traffic grows.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        engine = RecommendationEngine(
+            self.runtime,
+            learner_projector=StubLearnerProjector(
+                {
+                    "user_id": "demo-user",
+                    "concept_state": {},
+                    "subskill_state": {
+                        "tradeoff_reasoning": {
+                            "proficiency_estimate": 0.41,
+                            "confidence": 0.58,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                        "communication_clarity": {
+                            "proficiency_estimate": 0.52,
+                            "confidence": 0.55,
+                            "last_evidence_at": "2026-03-21T10:00:00Z",
+                        },
+                    },
+                    "trajectory_state": {
+                        "recent_fatigue_signal": 0.05,
+                        "recent_abandonment_signal": 0.08,
+                        "mock_readiness_estimate": 0.28,
+                        "mock_readiness_confidence": 0.23,
+                        "last_active_at": "2026-03-21T10:00:00Z",
+                    },
+                    "last_updated_at": "2026-03-21T10:00:00Z",
+                }
+            ),
+        )
+
+        decision = engine.next_recommendation(user_id="demo-user")
+
+        self.assertEqual(decision["chosen_action"]["mode"], "Study")
+        self.assertEqual(decision["chosen_action"]["session_intent"], "LearnNew")
+        self.assertEqual(decision["chosen_action"]["target_id"], "concept.alpha-topic")
+        self.assertIn("recent_mock_attempt", decision["blocking_signals"])
+        self.assertFalse(
+            any(
+                action["target_id"].startswith("concept.url-shortener.")
+                for action in decision["candidate_actions"]
+                if action["target_type"] == "concept"
+            )
+        )
+
+    def test_next_recommendation_uses_generic_weak_concept_follow_up_after_recent_mock(self):
         session = self.runtime.start_manual_session(
             user_id="demo-user",
             mode="MockInterview",
@@ -672,8 +737,14 @@ class RecommendationEngineTest(unittest.TestCase):
             "concept.url-shortener.storage-choice",
         )
         self.assertIn("recent_mock_attempt", decision["blocking_signals"])
-        self.assertIn("post_mock_bound_concept_follow_up", decision["supporting_signals"])
-        self.assertIn("mock", decision["rationale"].lower())
+        self.assertEqual(
+            decision["supporting_signals"],
+            [
+                "weak_reviewed_outcome",
+                "bounded_remediation_priority",
+            ],
+        )
+        self.assertNotIn("post_mock_bound_concept_follow_up", decision["supporting_signals"])
 
     def test_next_recommendation_suppresses_mock_more_strongly_after_abandoned_mock(self):
         session = self.runtime.start_manual_session(

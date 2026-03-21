@@ -367,7 +367,7 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             fresh_profile["concept_state"]["concept.alpha-topic"]["review_due_risk"],
         )
 
-    def test_mock_scenario_evidence_updates_bound_concepts_more_conservatively_than_direct_recall(
+    def test_mock_scenario_evidence_stays_out_of_concept_state_until_richer_mapping_exists(
         self,
     ):
         bound_concept_id = "concept.url-shortener.storage-choice"
@@ -434,13 +434,15 @@ class LearnerProjectorRuleTest(unittest.TestCase):
             user_id="user-1",
         )
 
-        self.assertLess(
-            mock_profile["concept_state"][bound_concept_id]["proficiency_estimate"],
-            direct_profile["concept_state"][bound_concept_id]["proficiency_estimate"],
+        self.assertEqual(mock_profile["concept_state"], {})
+        self.assertIn(bound_concept_id, direct_profile["concept_state"])
+        self.assertGreater(
+            mock_profile["subskill_state"]["tradeoff_reasoning"]["proficiency_estimate"],
+            0.0,
         )
-        self.assertLess(
-            mock_profile["concept_state"][bound_concept_id]["confidence"],
-            direct_profile["concept_state"][bound_concept_id]["confidence"],
+        self.assertGreater(
+            mock_profile["trajectory_state"]["mock_readiness_estimate"],
+            0.0,
         )
 
     def test_mock_readiness_remains_conservative_without_mock_or_follow_up_evidence(self):
@@ -631,7 +633,7 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
         self.assertGreater(concept["hint_dependency_signal"], 0.0)
         self.assertGreater(concept["review_due_risk"], 0.0)
 
-    def test_projector_updates_bound_concepts_from_reviewed_mock_history(self):
+    def test_projector_keeps_reviewed_mock_history_out_of_concept_state(self):
         runtime = SessionRuntime(self.catalog)
         projector = LearnerProjector()
         session = runtime.start_manual_session(
@@ -662,20 +664,7 @@ class LearnerProjectorIntegrationTest(unittest.TestCase):
 
         profile = projector.build_profile(runtime, user_id="user-1")
 
-        self.assertEqual(
-            sorted(profile["concept_state"]),
-            [
-                "concept.url-shortener.caching",
-                "concept.url-shortener.id-generation",
-                "concept.url-shortener.read-scaling",
-                "concept.url-shortener.storage-choice",
-            ],
-        )
-        self.assertNotIn("scenario.url-shortener.basic", profile["concept_state"])
-        self.assertGreater(
-            profile["concept_state"]["concept.url-shortener.storage-choice"]["review_due_risk"],
-            0.0,
-        )
+        self.assertEqual(profile["concept_state"], {})
         self.assertIn("tradeoff_reasoning", profile["subskill_state"])
         self.assertIn("communication_clarity", profile["subskill_state"])
         self.assertGreater(profile["trajectory_state"]["mock_readiness_estimate"], 0.0)

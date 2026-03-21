@@ -86,6 +86,11 @@ Examples:
 - a concept with known failure modes can seed a failure drill
 - a scenario can reuse a standard follow-up skeleton and then add scenario-specific overlays
 
+Explicit scenario-to-concept bindings such as `bound_concept_ids` remain
+author-curated metadata in the current baseline. Import scaffolding may carry
+the field through when supplied, but should not invent load-bearing bindings
+heuristically.
+
 Authors should curate and improve derived units, but the process should not require manual creation of every derivative from scratch.
 
 ## What bundled authoring does not permit

@@ -67,8 +67,12 @@
 - `canonical_follow_up_candidates` — канонически уместные направления углубления,
   а не session-specific queue вопросов.
 - `bound_concept_ids` — явная canonical привязка scenario к concept ids, которые
-  могут использоваться для conservative post-mock targeting и learner-state
-  updates. Это не runtime queue и не эвристика по `expected_focus_areas`.
+  валидируются как author-managed metadata. Это не runtime queue и не эвристика
+  по `expected_focus_areas`.
+- Само наличие `bound_concept_ids` не означает, что scenario уже даёт честное
+  concept-specific learner evidence. В текущем baseline поле используется как
+  validated binding metadata; concept-level post-mock targeting требует richer
+  evidence contract.
 
 ## Entity: HintLadder
 

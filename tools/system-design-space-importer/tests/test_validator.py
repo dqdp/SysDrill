@@ -139,6 +139,45 @@ class ValidatorTest(unittest.TestCase):
         self.assertTrue(report["schema_valid"])
         self.assertEqual(report["missing_required_paths"], [])
 
+    def test_validate_semantic_draft_rejects_unknown_bound_concept_ids_when_present(self):
+        scenario = _valid_scenario()
+        scenario["bound_concept_ids"] = draft_field(["concept.missing"], _provenance(), True)
+        draft = {
+            "draft_id": "semdraft.troubleshooting-example",
+            "source_document_ids": ["troubleshooting-example"],
+            "inferred_topic_slug": "troubleshooting-example",
+            "mapper_version": "0.1.0",
+            "concepts": [_minimal_concept()],
+            "patterns": [],
+            "scenarios": [scenario],
+            "hint_ladders": [],
+            "warnings": [],
+        }
+
+        report = validate_semantic_draft(draft)
+
+        self.assertFalse(report["schema_valid"])
+        self.assertIn("unknown scenario bound concept ids", "\n".join(report["errors"]))
+
+    def test_validate_semantic_draft_accepts_known_bound_concept_ids_when_present(self):
+        scenario = _valid_scenario()
+        scenario["bound_concept_ids"] = draft_field(["concept.example"], _provenance(), True)
+        draft = {
+            "draft_id": "semdraft.troubleshooting-example",
+            "source_document_ids": ["troubleshooting-example"],
+            "inferred_topic_slug": "troubleshooting-example",
+            "mapper_version": "0.1.0",
+            "concepts": [_minimal_concept()],
+            "patterns": [],
+            "scenarios": [scenario],
+            "hint_ladders": [],
+            "warnings": [],
+        }
+
+        report = validate_semantic_draft(draft)
+
+        self.assertTrue(report["schema_valid"])
+
 
 if __name__ == "__main__":
     unittest.main()
