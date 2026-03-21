@@ -11,6 +11,13 @@ describe("App", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("/learner/summary")) {
+        return Promise.resolve(learnerSummaryPayload());
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
     window.localStorage.clear();
   });
 
@@ -72,6 +79,7 @@ describe("App", () => {
           ],
         }),
       )
+      .mockResolvedValueOnce(learnerSummaryPayload())
       .mockResolvedValueOnce(
         jsonResponse({
           session_id: "session.0001",
@@ -102,6 +110,20 @@ describe("App", () => {
             support_dependence_note: null,
           },
         }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0001",
+            state: "completed",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching.",
+            },
+          }),
+        ),
       )
       .mockResolvedValueOnce(
         jsonResponse({
@@ -164,7 +186,7 @@ describe("App", () => {
         "Start with a supportive Study / LearnNew unit on 'Кэширование' because there is no reviewed evidence for this concept yet.",
       ),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Кэширование")).toBeInTheDocument();
+    expect((await screen.findAllByText("Кэширование")).length).toBeGreaterThan(0);
     const practiceRemediateRadio = screen.getByRole("radio", {
       name: /Practice \/ Remediate/i,
     });
@@ -208,15 +230,17 @@ describe("App", () => {
     expect(practiceRemediateRadio).toBeEnabled();
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(7);
+      expect(fetchMock).toHaveBeenCalledTimes(10);
     });
-    expect(fetchMock.mock.calls[0]?.[0]).toContain("/recommendations/next");
-    expect(fetchMock.mock.calls[1]?.[0]).toContain("/runtime/manual-launch-options");
-    expect(fetchMock.mock.calls[2]?.[0]).toContain(
-      "/runtime/sessions/start-from-recommendation",
-    );
-    expect(fetchMock.mock.calls[5]?.[0]).toContain("/recommendations/next");
-    expect(fetchMock.mock.calls[6]?.[0]).toContain("/runtime/manual-launch-options");
+    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(calls[0]).toContain("/recommendations/next");
+    expect(calls[1]).toContain("/runtime/manual-launch-options");
+    expect(calls[2]).toContain("/learner/summary");
+    expect(calls[3]).toContain("/runtime/sessions/start-from-recommendation");
+    expect(calls[6]).toContain("/runtime/sessions/session.0001/complete");
+    expect(calls[7]).toContain("/recommendations/next");
+    expect(calls[8]).toContain("/runtime/manual-launch-options");
+    expect(calls[9]).toContain("/learner/summary");
   });
 
   it("shows recommendation errors explicitly while leaving manual fallback visible", async () => {
@@ -244,6 +268,44 @@ describe("App", () => {
     expect(
       await screen.findByText("runtime content is not configured"),
     ).toBeInTheDocument();
+    expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
+  });
+
+  it("renders learner summary sections on the launcher", async () => {
+    fetchMock
+      .mockResolvedValueOnce(recommendationPayload("Start here."))
+      .mockResolvedValueOnce(manualLaunchOptionsPayload());
+
+    render(<App />);
+
+    expect(await screen.findByText("Current evidence snapshot")).toBeInTheDocument();
+    expect(
+      screen.getByText("Mock readiness is still too uncertain"),
+    ).toBeInTheDocument();
+    expect((await screen.findAllByText("Кэширование")).length).toBeGreaterThan(0);
+    const reviewDueCard = screen.getByText("Review due").closest("article");
+    expect(reviewDueCard).not.toBeNull();
+    expect(reviewDueCard).toHaveTextContent(
+      "Recent evidence looks fragile enough that a review pass is due.",
+    );
+  });
+
+  it("keeps the launcher usable when learner summary loading fails", async () => {
+    fetchMock.mockImplementation((input) => {
+      const url = String(input);
+      if (url.includes("/learner/summary")) {
+        return Promise.resolve(errorResponse(503, "learner summary unavailable"));
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+    fetchMock
+      .mockResolvedValueOnce(recommendationPayload("Start here."))
+      .mockResolvedValueOnce(manualLaunchOptionsPayload());
+
+    render(<App />);
+
+    expect(await screen.findByText("learner summary unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Start here.")).toBeInTheDocument();
     expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
   });
 
@@ -288,6 +350,7 @@ describe("App", () => {
           ],
         }),
       )
+      .mockResolvedValueOnce(learnerSummaryPayload())
       .mockResolvedValueOnce(
         jsonResponse({
           session_id: "session.0001",
@@ -427,7 +490,7 @@ describe("App", () => {
 
     expect(await screen.findByText("Weighted score")).toBeInTheDocument();
     expect(screen.getByText("0.67")).toBeInTheDocument();
-    expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).not.toBeNull();
 
     const calls = fetchMock.mock.calls.map((call) => String(call[0]));
     expect(calls.filter((url) => url.includes("/runtime/sessions/session.0043/answer"))).toHaveLength(0);
@@ -461,7 +524,7 @@ describe("App", () => {
 
     expect(await screen.findByText("Weighted score")).toBeInTheDocument();
     expect(screen.getByText("0.67")).toBeInTheDocument();
-    expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).not.toBeNull();
 
     const calls = fetchMock.mock.calls.map((call) => String(call[0]));
     expect(calls.filter((url) => url.includes("/runtime/sessions/session.0044/answer"))).toHaveLength(0);
@@ -522,11 +585,12 @@ describe("App", () => {
     expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/runtime/sessions/session.missing");
     expect(fetchMock.mock.calls[1]?.[0]).toContain("/recommendations/next");
     expect(fetchMock.mock.calls[2]?.[0]).toContain("/runtime/manual-launch-options");
+    expect(fetchMock.mock.calls[3]?.[0]).toContain("/learner/summary");
   });
 
   it("clears the stored session envelope on manual reset", async () => {
@@ -541,6 +605,20 @@ describe("App", () => {
           runtimeSessionSnapshot({
             session_id: "session.0045",
             state: "awaiting_answer",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0045",
+            state: "abandoned",
             mode: "Study",
             session_intent: "LearnNew",
             current_unit: {
@@ -597,6 +675,10 @@ describe("App", () => {
 
     expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
+    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(
+      calls.some((url) => url.includes("/runtime/sessions/session.0045/abandon")),
+    ).toBe(true);
   });
 
   it("shows an explicit restore error and retries the saved session", async () => {
@@ -659,7 +741,7 @@ describe("App", () => {
     expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
   });
 
@@ -672,15 +754,17 @@ describe("App", () => {
     expect(await screen.findByText("Resume the shown recommendation.")).toBeInTheDocument();
     expect(screen.getByText("bootstrap.recommendation.v1")).toBeInTheDocument();
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/runtime/manual-launch-options");
+    expect(fetchMock.mock.calls[1]?.[0]).toContain("/learner/summary");
   });
 
   it("recovers from a stale cached recommendation by loading a fresh decision", async () => {
     setStoredRecommendation(recommendationPayloadData("Stale cached recommendation."));
     fetchMock
       .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
       .mockResolvedValueOnce(errorResponse(404, "unknown decision_id: rec.0001"))
       .mockResolvedValueOnce(
         recommendationPayload("Fresh recommendation after stale cached decision."),
@@ -704,12 +788,12 @@ describe("App", () => {
       "Fresh recommendation after stale cached decision.",
     );
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
-    expect(fetchMock.mock.calls[1]?.[0]).toContain(
+    expect(fetchMock.mock.calls[2]?.[0]).toContain(
       "/runtime/sessions/start-from-recommendation",
     );
-    expect(fetchMock.mock.calls[2]?.[0]).toContain("/recommendations/next");
+    expect(fetchMock.mock.calls[3]?.[0]).toContain("/recommendations/next");
   });
 
   it("smoke-tests reload recovery through review and back to the launcher", async () => {
@@ -753,6 +837,20 @@ describe("App", () => {
           },
         }),
       )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0090",
+            state: "completed",
+            mode: "Study",
+            session_intent: "LearnNew",
+            current_unit: {
+              id: "elu.concept_recall.study.learn_new.concept.alpha-topic",
+              visible_prompt: "Explain caching after reload.",
+            },
+          }),
+        ),
+      )
       .mockResolvedValueOnce(recommendationPayload("Next step after recovered review."))
       .mockResolvedValueOnce(manualLaunchOptionsPayload());
 
@@ -777,11 +875,13 @@ describe("App", () => {
     expect(await screen.findByText("Backend-provided manual options")).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).toBeNull();
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(fetchMock).toHaveBeenCalledTimes(7);
     });
     expect(fetchMock.mock.calls[0]?.[0]).toContain("/runtime/sessions/session.0090");
     expect(fetchMock.mock.calls[1]?.[0]).toContain("/runtime/sessions/session.0090/answer");
     expect(fetchMock.mock.calls[2]?.[0]).toContain("/runtime/sessions/session.0090/evaluate");
+    expect(fetchMock.mock.calls[3]?.[0]).toContain("/runtime/sessions/session.0090/complete");
+    expect(fetchMock.mock.calls[6]?.[0]).toContain("/learner/summary");
   });
 });
 
@@ -900,6 +1000,46 @@ function manualLaunchOptionsPayload(): Response {
       },
     ],
   });
+}
+
+function learnerSummaryPayload(): Response {
+  return jsonResponse(learnerSummaryPayloadData());
+}
+
+function learnerSummaryPayloadData(): Record<string, unknown> {
+  return {
+    user_id: "demo-user",
+    weak_areas: [
+      {
+        target_kind: "concept",
+        target_id: "concept.alpha-topic",
+        title: "Кэширование",
+        posture: "weak",
+        summary: "Reviewed evidence still points to a weak concept foundation here.",
+      },
+    ],
+    review_due: [
+      {
+        target_kind: "concept",
+        target_id: "concept.alpha-topic",
+        title: "Кэширование",
+        summary: "Recent evidence looks fragile enough that a review pass is due.",
+      },
+    ],
+    readiness_summary: {
+      category: "insufficient_evidence",
+      title: "Mock readiness is still too uncertain",
+      detail: "Need more completed practice evidence before escalating to a readiness check.",
+    },
+    evidence_posture: {
+      category: "conservative_summary",
+      title: "The learner summary stays intentionally conservative",
+      details: [
+        "Recent work still shows support-dependent evidence.",
+        "The current summary is still based on limited repeated evidence.",
+      ],
+    },
+  };
 }
 
 function setStoredRecommendation(payload: Record<string, unknown>): void {

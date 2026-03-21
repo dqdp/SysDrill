@@ -1,8 +1,11 @@
 import { startTransition, useEffect, useState } from "react";
 
 import {
+  abandonRuntimeSession,
   ApiError,
+  completeRuntimeSession,
   evaluateSession,
+  getLearnerSummary,
   getRuntimeSession,
   getReview,
   getNextRecommendation,
@@ -12,6 +15,7 @@ import {
   submitAnswer,
   type EvaluateResponse,
   type LaunchOption,
+  type LearnerSummaryResponse,
   type RecommendationDecisionResponse,
   type RuntimeSessionResponse,
 } from "./api";
@@ -70,13 +74,17 @@ export function App() {
   const [recommendationReloadKey, setRecommendationReloadKey] = useState(0);
   const [restoreAttemptKey, setRestoreAttemptKey] = useState(0);
   const [restoreError, setRestoreError] = useState("");
+  const [learnerSummary, setLearnerSummary] = useState<LearnerSummaryResponse | null>(null);
+  const [summaryError, setSummaryError] = useState("");
   const [launchOptions, setLaunchOptions] = useState<LaunchOption[]>([]);
   const [selectedUnitId, setSelectedUnitId] = useState<string>("");
   const [launcherError, setLauncherError] = useState<string>("");
   const [phase, setPhase] = useState<Phase>("launcher");
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [isStartingSession, setIsStartingSession] = useState(false);
+  const [isReturningToLauncher, setIsReturningToLauncher] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [visiblePrompt, setVisiblePrompt] = useState("");
   const [transcript, setTranscript] = useState("");
@@ -87,6 +95,15 @@ export function App() {
   const activeProfile = LAUNCH_PROFILES[profileIndex] ?? LAUNCH_PROFILES[0];
   const isLauncherPhase = phase === "launcher";
   const shouldLoadLauncherData = isLauncherPhase && !isRestoringSession && !restoreError;
+  const learnerWeakAreas = Array.isArray(learnerSummary?.weak_areas)
+    ? learnerSummary.weak_areas
+    : [];
+  const learnerReviewDue = Array.isArray(learnerSummary?.review_due)
+    ? learnerSummary.review_due
+    : [];
+  const learnerEvidenceDetails = Array.isArray(learnerSummary?.evidence_posture?.details)
+    ? learnerSummary.evidence_posture.details
+    : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -337,10 +354,6 @@ export function App() {
       clearSessionResumeEnvelope();
       return;
     }
-    if (phase === "review") {
-      clearSessionResumeEnvelope();
-      return;
-    }
     writeSessionResumeEnvelope({
       sessionId,
       transcript,
@@ -446,6 +459,45 @@ export function App() {
       cancelled = true;
     };
   }, [activeProfile.mode, activeProfile.sessionIntent, shouldLoadLauncherData]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLearnerSummary() {
+      if (!shouldLoadLauncherData) {
+        return;
+      }
+
+      setIsLoadingSummary(true);
+      setSummaryError("");
+      setLearnerSummary(null);
+
+      try {
+        const response = await getLearnerSummary();
+        if (cancelled) {
+          return;
+        }
+        startTransition(() => {
+          setLearnerSummary(response);
+          setIsLoadingSummary(false);
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        startTransition(() => {
+          setSummaryError(errorMessage(error));
+          setIsLoadingSummary(false);
+        });
+      }
+    }
+
+    void loadLearnerSummary();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldLoadLauncherData]);
 
   async function handleStartRecommendedSession() {
     if (!recommendation) {
@@ -590,7 +642,26 @@ export function App() {
     }
   }
 
-  function handleReset() {
+  async function handleReset() {
+    if (isReturningToLauncher) {
+      return;
+    }
+
+    setIsReturningToLauncher(true);
+    setSessionError("");
+
+    if (sessionId) {
+      try {
+        await closeSessionForLauncherExit(sessionId, phase);
+      } catch (error) {
+        startTransition(() => {
+          setSessionError(errorMessage(error));
+          setIsReturningToLauncher(false);
+        });
+        return;
+      }
+    }
+
     clearSessionResumeEnvelope();
     clearStoredRecommendation();
     startTransition(() => {
@@ -603,7 +674,10 @@ export function App() {
       setReview(null);
       setRecommendation(null);
       setRecommendationError("");
+      setLearnerSummary(null);
+      setSummaryError("");
       setRestoreError("");
+      setIsReturningToLauncher(false);
       setRecommendationReloadKey((value) => value + 1);
     });
   }
@@ -656,8 +730,13 @@ export function App() {
               <h2>{activeProfile.label}</h2>
             </div>
             {phase !== "launcher" ? (
-              <button className="ghost-button" onClick={handleReset} type="button">
-                Back to launcher
+              <button
+                className="ghost-button"
+                disabled={isReturningToLauncher}
+                onClick={() => void handleReset()}
+                type="button"
+              >
+                {isReturningToLauncher ? "Returning..." : "Back to launcher"}
               </button>
             ) : null}
           </div>
@@ -720,6 +799,85 @@ export function App() {
               >
                 {isStartingSession ? "Starting session..." : "Start recommended session"}
               </button>
+            </div>
+          ) : null}
+
+          {phase === "launcher" && !restoreError ? (
+            <div className="launcher-section">
+              <div className="launcher-header">
+                <div>
+                  <p className="panel-label">Learner summary</p>
+                  <h3>Current evidence snapshot</h3>
+                </div>
+                <span className="status-chip">
+                  {isLoadingSummary
+                    ? "Loading"
+                    : learnerSummary
+                      ? `${learnerWeakAreas.length} weak / ${learnerReviewDue.length} due`
+                      : "Unavailable"}
+                </span>
+              </div>
+
+              {summaryError ? <p className="error-banner">{summaryError}</p> : null}
+
+              {learnerSummary ? (
+                <div className="review-grid">
+                  <article className="review-card emphasis">
+                    <p className="panel-label">Readiness</p>
+                    <strong>{learnerSummary.readiness_summary?.title ?? "Summary unavailable"}</strong>
+                    <p>
+                      {learnerSummary.readiness_summary?.detail ??
+                        "Learner readiness could not be summarized right now."}
+                    </p>
+                  </article>
+
+                  <article className="review-card">
+                    <p className="panel-label">Weak areas</p>
+                    {learnerWeakAreas.length > 0 ? (
+                      <ul>
+                        {learnerWeakAreas.map((item) => (
+                          <li key={`${item.target_kind}-${item.target_id}`}>
+                            <strong>{item.title}</strong>: {item.summary}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="empty-state">
+                        No weak areas are strongly evidenced yet.
+                      </p>
+                    )}
+                  </article>
+
+                  <article className="review-card">
+                    <p className="panel-label">Review due</p>
+                    {learnerReviewDue.length > 0 ? (
+                      <ul>
+                        {learnerReviewDue.map((item) => (
+                          <li key={`${item.target_kind}-${item.target_id}`}>
+                            <strong>{item.title}</strong>: {item.summary}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="empty-state">
+                        Nothing is strongly review-due yet.
+                      </p>
+                    )}
+                  </article>
+
+                  <article className="review-card">
+                    <p className="panel-label">Evidence posture</p>
+                    <strong>
+                      {learnerSummary.evidence_posture?.title ?? "Summary unavailable"}
+                    </strong>
+                    <ul>
+                      {learnerEvidenceDetails.map((detail) => (
+                        <li key={detail}>{detail}</li>
+                      ))}
+                    </ul>
+                  </article>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -913,6 +1071,56 @@ async function evaluateOrLoadReview(sessionId: string): Promise<EvaluateResponse
       throw evaluationError;
     }
   }
+}
+
+async function closeSessionForLauncherExit(
+  sessionId: string,
+  phase: Phase,
+): Promise<void> {
+  if (phase === "review") {
+    try {
+      await completeRuntimeSession(sessionId);
+      return;
+    } catch (error) {
+      if (isMissingSessionError(error)) {
+        return;
+      }
+      if (!(error instanceof ApiError) || error.status !== 409) {
+        throw error;
+      }
+    }
+  } else {
+    try {
+      await abandonRuntimeSession(sessionId);
+      return;
+    } catch (error) {
+      if (isMissingSessionError(error)) {
+        return;
+      }
+      if (!(error instanceof ApiError) || error.status !== 409) {
+        throw error;
+      }
+    }
+  }
+
+  let session: RuntimeSessionResponse;
+  try {
+    session = await getRuntimeSession(sessionId);
+  } catch (error) {
+    if (isMissingSessionError(error)) {
+      return;
+    }
+    throw error;
+  }
+
+  if (session.state === "completed" || session.state === "abandoned") {
+    return;
+  }
+  if (session.state === "review_presented") {
+    await completeRuntimeSession(sessionId);
+    return;
+  }
+  await abandonRuntimeSession(sessionId);
 }
 
 function applySessionState(payload: {

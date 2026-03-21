@@ -10,6 +10,11 @@ from sysdrill_backend.content_catalog_api import (
     build_topic_detail,
     build_topic_summary,
 )
+from sysdrill_backend.learner_projection import LearnerProjector
+from sysdrill_backend.learner_summary import (
+    build_content_title_map,
+    build_learner_summary,
+)
 from sysdrill_backend.recommendation_engine import (
     NoRecommendationCandidatesError,
     RecommendationDecisionNotFoundError,
@@ -53,6 +58,25 @@ class RecommendationRequest(BaseModel):
     user_id: StrictStr
 
 
+class RuntimeHintRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    hint_level: NonNegativeInt | None = None
+    reason: StrictStr | None = None
+
+
+class RuntimeRevealRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reveal_kind: StrictStr = "canonical_answer"
+
+
+class RuntimeAbandonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    abandon_reason: StrictStr = "explicit_exit"
+
+
 class RecommendationActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -90,6 +114,8 @@ def create_app(
         )
         runtime = SessionRuntime(catalog)
         recommendation_engine = RecommendationEngine(runtime)
+    learner_projector = LearnerProjector()
+    content_title_map = build_content_title_map(catalog)
 
     app = FastAPI(title="System Design Trainer API")
 
@@ -153,6 +179,13 @@ def create_app(
             return recommendation_engine.next_recommendation(user_id=request.user_id)
         except NoRecommendationCandidatesError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/learner/summary")
+    def get_learner_summary(user_id: str) -> dict:
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        profile = learner_projector.build_profile(runtime, user_id)
+        return build_learner_summary(profile, content_titles=content_title_map)
 
     @app.post("/runtime/sessions/start-from-recommendation")
     def start_session_from_recommendation(request: StartFromRecommendationRequest) -> dict:
@@ -228,15 +261,92 @@ def create_app(
             raise HTTPException(status_code=503, detail="runtime content is not configured")
         try:
             result = runtime.evaluate_pending_session(session_id)
-            if recommendation_engine is not None:
-                decision_id = result["session"].get("recommendation_decision_id")
-                if isinstance(decision_id, str) and decision_id:
-                    recommendation_engine.mark_completed(decision_id, session_id)
             return {
                 "session_id": result["session"]["session_id"],
                 "state": result["session"]["state"],
                 "evaluation_result": result["evaluation_result"],
                 "review_report": result["review_report"],
+            }
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SessionRuntimeInvalidStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SessionRuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/runtime/sessions/{session_id}/complete")
+    def complete_runtime_session(session_id: str) -> dict:
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            session = runtime.complete_session(session_id)
+            if recommendation_engine is not None:
+                decision_id = session.get("recommendation_decision_id")
+                if isinstance(decision_id, str) and decision_id:
+                    recommendation_engine.mark_completed(decision_id, session_id)
+            return session
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SessionRuntimeInvalidStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SessionRuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/runtime/sessions/{session_id}/abandon")
+    def abandon_runtime_session(session_id: str, request: RuntimeAbandonRequest) -> dict:
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            return runtime.abandon_session(
+                session_id,
+                abandon_reason=request.abandon_reason,
+            )
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SessionRuntimeInvalidStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SessionRuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/runtime/sessions/{session_id}/hint")
+    def request_runtime_hint(session_id: str, request: RuntimeHintRequest) -> dict:
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            result = runtime.request_hint(
+                session_id,
+                hint_level=request.hint_level,
+                reason=request.reason,
+            )
+            return {
+                "session_id": result["session"]["session_id"],
+                "state": result["session"]["state"],
+                "hint_level": result["hint_level"],
+                "hint_count_for_unit": result["hint_count_for_unit"],
+                "occurred_at": result["occurred_at"],
+            }
+        except SessionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except SessionRuntimeInvalidStateError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SessionRuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/runtime/sessions/{session_id}/reveal")
+    def reveal_runtime_answer(session_id: str, request: RuntimeRevealRequest) -> dict:
+        if runtime is None:
+            raise HTTPException(status_code=503, detail="runtime content is not configured")
+        try:
+            result = runtime.reveal_answer(
+                session_id,
+                reveal_kind=request.reveal_kind,
+            )
+            return {
+                "session_id": result["session"]["session_id"],
+                "state": result["session"]["state"],
+                "reveal_kind": result["reveal_kind"],
+                "reveal_count_for_unit": result["reveal_count_for_unit"],
+                "occurred_at": result["occurred_at"],
             }
         except SessionNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc

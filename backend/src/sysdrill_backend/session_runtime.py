@@ -147,6 +147,10 @@ class SessionRuntime:
             "last_evaluation_request": None,
             "last_evaluation_result": None,
             "last_review_report": None,
+            "hint_count_for_unit": 0,
+            "answer_reveal_count_for_unit": 0,
+            "answer_reveal_flag": False,
+            "session_started_at": None,
             "recommendation_decision_id": (
                 recommendation_context["decision_id"] if recommendation_context else None
             ),
@@ -180,7 +184,7 @@ class SessionRuntime:
             },
         )
         session["state"] = "started"
-        self._emit_event(
+        started_event = self._emit_event(
             session,
             "session_started",
             {
@@ -188,6 +192,7 @@ class SessionRuntime:
                 "strictness_profile": session["strictness_profile"],
             },
         )
+        session["session_started_at"] = started_event["occurred_at"]
         session["state"] = "unit_presented"
         self._emit_event(
             session,
@@ -288,6 +293,149 @@ class SessionRuntime:
             outcomes.sort(key=lambda outcome: outcome["session_id"])
             return copy.deepcopy(outcomes)
 
+    def request_hint(
+        self,
+        session_id: str,
+        hint_level: int | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            session = self._require_session(session_id)
+            if session["state"] not in {"awaiting_answer", "follow_up_round"}:
+                raise SessionRuntimeInvalidStateError(
+                    "cannot request hint when session state is '{0}'".format(session["state"])
+                )
+
+            allowed_hint_levels = self._allowed_hint_levels(session)
+            if hint_level is None:
+                hint_level = allowed_hint_levels[min(
+                    session["hint_count_for_unit"],
+                    len(allowed_hint_levels) - 1,
+                )]
+            if hint_level not in allowed_hint_levels:
+                raise SessionRuntimeError(
+                    "hint_level '{0}' is not allowed for the current unit".format(hint_level)
+                )
+
+            session["hint_count_for_unit"] += 1
+            event = self._emit_event(
+                session,
+                "hint_requested",
+                {
+                    "hint_level": hint_level,
+                    "hint_count_for_unit": session["hint_count_for_unit"],
+                    "time_to_hint_ms": None,
+                    "reason": reason,
+                },
+            )
+            return {
+                "session": self.get_session(session_id),
+                "session_id": session_id,
+                "state": session["state"],
+                "hint_level": hint_level,
+                "hint_count_for_unit": session["hint_count_for_unit"],
+                "occurred_at": event["occurred_at"],
+            }
+
+    def reveal_answer(
+        self,
+        session_id: str,
+        reveal_kind: str = "canonical_answer",
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            session = self._require_session(session_id)
+            if session["state"] not in {"awaiting_answer", "follow_up_round"}:
+                raise SessionRuntimeInvalidStateError(
+                    "cannot reveal answer when session state is '{0}'".format(session["state"])
+                )
+
+            completion_rules = session["current_unit"].get("completion_rules")
+            if not isinstance(completion_rules, dict) or not completion_rules.get(
+                "allows_answer_reveal",
+                False,
+            ):
+                raise SessionRuntimeError("answer reveal is not allowed for the current unit")
+
+            session["answer_reveal_count_for_unit"] += 1
+            session["answer_reveal_flag"] = True
+            event = self._emit_event(
+                session,
+                "answer_revealed",
+                {
+                    "reveal_kind": reveal_kind,
+                    "reveal_count_for_unit": session["answer_reveal_count_for_unit"],
+                    "had_prior_hints": session["hint_count_for_unit"] > 0,
+                },
+            )
+            return {
+                "session": self.get_session(session_id),
+                "session_id": session_id,
+                "state": session["state"],
+                "reveal_kind": reveal_kind,
+                "reveal_count_for_unit": session["answer_reveal_count_for_unit"],
+                "occurred_at": event["occurred_at"],
+            }
+
+    def complete_session(self, session_id: str) -> dict[str, Any]:
+        with self._state_lock:
+            session = self._require_session(session_id)
+            if session["state"] != "review_presented":
+                raise SessionRuntimeInvalidStateError(
+                    "cannot complete session when session state is '{0}'".format(session["state"])
+                )
+
+            completed_from_state = session["state"]
+            session["state"] = "completed"
+            payload = {"completed_from_state": completed_from_state}
+            session_duration_ms = self._session_duration_ms(session)
+            if session_duration_ms is not None:
+                payload["session_duration_ms"] = session_duration_ms
+            self._emit_event(session, "session_completed", payload)
+            if isinstance(session.get("recommendation_decision_id"), str):
+                self._emit_event(
+                    session,
+                    "recommendation_completed",
+                    {
+                        "decision_id": session["recommendation_decision_id"],
+                        "completion_state": "completed",
+                    },
+                )
+
+            return self.get_session(session_id)
+
+    def abandon_session(
+        self,
+        session_id: str,
+        abandon_reason: str = "explicit_exit",
+    ) -> dict[str, Any]:
+        with self._state_lock:
+            session = self._require_session(session_id)
+            if session["state"] not in {
+                "planned",
+                "started",
+                "unit_presented",
+                "awaiting_answer",
+                "follow_up_round",
+                "submitted",
+                "evaluation_pending",
+                "evaluated",
+            }:
+                raise SessionRuntimeInvalidStateError(
+                    "cannot abandon session when session state is '{0}'".format(session["state"])
+                )
+
+            abandoned_from_state = session["state"]
+            session["state"] = "abandoned"
+            payload = {
+                "abandon_reason": abandon_reason,
+                "abandoned_from_state": abandoned_from_state,
+            }
+            session_duration_ms = self._session_duration_ms(session)
+            if session_duration_ms is not None:
+                payload["session_duration_ms"] = session_duration_ms
+            self._emit_event(session, "session_abandoned", payload)
+            return self.get_session(session_id)
+
     def submit_answer(
         self,
         session_id: str,
@@ -313,7 +461,7 @@ class SessionRuntime:
                     "char_count": len(transcript),
                     "response_latency_ms": response_latency_ms,
                     "submission_kind": submission_kind,
-                    "used_prior_hints": False,
+                    "used_prior_hints": session["hint_count_for_unit"] > 0,
                     "follow_up_context": False,
                 },
             )
@@ -327,10 +475,10 @@ class SessionRuntime:
                 "binding_id": session["current_unit"]["evaluation_binding_id"],
                 "transcript_text": transcript,
                 "hint_usage_summary": {
-                    "hint_count": 0,
-                    "used_prior_hints": False,
+                    "hint_count": session["hint_count_for_unit"],
+                    "used_prior_hints": session["hint_count_for_unit"] > 0,
                 },
-                "answer_reveal_flag": False,
+                "answer_reveal_flag": session["answer_reveal_flag"],
                 "timing_summary": {
                     "response_latency_ms": response_latency_ms,
                 },
@@ -391,15 +539,6 @@ class SessionRuntime:
                     "missed_dimension_count": len(review_report.get("missed_dimensions", [])),
                 },
             )
-            if isinstance(session.get("recommendation_decision_id"), str):
-                self._emit_event(
-                    session,
-                    "recommendation_completed",
-                    {
-                        "decision_id": session["recommendation_decision_id"],
-                        "completion_state": "review_presented",
-                    },
-                )
 
             return {
                 "session": self.get_session(session_id),
@@ -557,7 +696,7 @@ class SessionRuntime:
         session: dict[str, Any],
         event_type: str,
         payload: dict[str, Any],
-    ) -> None:
+    ) -> dict[str, Any]:
         event_id = self._next_event_id()
         content_ids = session["current_unit"].get("source_content_ids", [])
         event = {
@@ -575,6 +714,7 @@ class SessionRuntime:
         }
         self._events.append(event)
         session["event_ids"].append(event_id)
+        return event
 
     def _snapshot_session(self, session: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -591,6 +731,28 @@ class SessionRuntime:
             "last_review_report": copy.deepcopy(session["last_review_report"]),
             "recommendation_decision_id": session.get("recommendation_decision_id"),
         }
+
+    def _allowed_hint_levels(self, session: dict[str, Any]) -> list[int]:
+        allowed_hint_levels = session["current_unit"].get("allowed_hint_levels")
+        if not isinstance(allowed_hint_levels, list):
+            raise SessionRuntimeError("current unit allowed_hint_levels are missing")
+        normalized_levels = [
+            int(level)
+            for level in allowed_hint_levels
+            if isinstance(level, int) and level > 0
+        ]
+        if not normalized_levels:
+            raise SessionRuntimeError("current unit allowed_hint_levels are invalid")
+        return normalized_levels
+
+    def _session_duration_ms(self, session: dict[str, Any]) -> int | None:
+        started_at_raw = session.get("session_started_at")
+        if not isinstance(started_at_raw, str) or not started_at_raw:
+            return None
+        started_at = self._parse_utc_iso(started_at_raw)
+        if started_at is None:
+            return None
+        return max(0, int((datetime.now(timezone.utc) - started_at).total_seconds() * 1000))
 
     def _unit_family(self, unit: dict[str, Any]) -> str:
         unit_id = unit.get("id")
@@ -615,6 +777,16 @@ class SessionRuntime:
 
     def _utc_now_iso(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def _parse_utc_iso(self, value: str) -> datetime | None:
+        normalized = value.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     def _build_content_metadata_by_id(
         self,

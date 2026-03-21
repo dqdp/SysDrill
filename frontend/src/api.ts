@@ -81,6 +81,34 @@ export type EvaluateResponse = {
   };
 };
 
+export type LearnerSummaryItem = {
+  target_kind: string;
+  target_id: string;
+  title: string;
+  summary: string;
+  posture?: string;
+};
+
+export type LearnerReadinessSummary = {
+  category: string;
+  title: string;
+  detail: string;
+};
+
+export type LearnerEvidencePosture = {
+  category: string;
+  title: string;
+  details: string[];
+};
+
+export type LearnerSummaryResponse = {
+  user_id: string;
+  weak_areas: LearnerSummaryItem[];
+  review_due: LearnerSummaryItem[];
+  readiness_summary: LearnerReadinessSummary;
+  evidence_posture: LearnerEvidencePosture;
+};
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiError extends Error {
@@ -203,4 +231,31 @@ export async function getRuntimeSession(
   sessionId: string,
 ): Promise<RuntimeSessionResponse> {
   return request<RuntimeSessionResponse>(`/runtime/sessions/${sessionId}`);
+}
+
+export async function getLearnerSummary(): Promise<LearnerSummaryResponse> {
+  const params = new URLSearchParams({
+    user_id: "demo-user",
+  });
+  return request<LearnerSummaryResponse>(`/learner/summary?${params.toString()}`);
+}
+
+export async function completeRuntimeSession(
+  sessionId: string,
+): Promise<RuntimeSessionResponse> {
+  return request<RuntimeSessionResponse>(`/runtime/sessions/${sessionId}/complete`, {
+    method: "POST",
+  });
+}
+
+export async function abandonRuntimeSession(
+  sessionId: string,
+  abandonReason = "explicit_exit",
+): Promise<RuntimeSessionResponse> {
+  return request<RuntimeSessionResponse>(`/runtime/sessions/${sessionId}/abandon`, {
+    method: "POST",
+    body: JSON.stringify({
+      abandon_reason: abandonReason,
+    }),
+  });
 }

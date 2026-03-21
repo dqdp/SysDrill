@@ -14,6 +14,8 @@ class LearnerProjector:
         latest_activity_at: str | None = None
         reviewed_session_count = 0
         practice_or_mock_review_count = 0
+        completed_session_count = 0
+        abandoned_session_count = 0
 
         for session in sessions:
             session_events = runtime_reader.list_session_events(session["session_id"])
@@ -21,6 +23,15 @@ class LearnerProjector:
                 [event.get("occurred_at") for event in session_events]
             )
             latest_activity_at = _later_timestamp(latest_activity_at, session_latest_at)
+            event_types = {
+                event.get("event_type")
+                for event in session_events
+                if isinstance(event, dict) and isinstance(event.get("event_type"), str)
+            }
+            if "session_completed" in event_types:
+                completed_session_count += 1
+            if "session_abandoned" in event_types:
+                abandoned_session_count += 1
 
             evaluation_result = session.get("last_evaluation_result")
             if not isinstance(evaluation_result, dict):
@@ -52,8 +63,11 @@ class LearnerProjector:
         trajectory_state = _build_trajectory_state(
             concept_state=concept_state,
             subskill_state=subskill_state,
+            total_session_count=len(sessions),
             reviewed_session_count=reviewed_session_count,
             practice_or_mock_review_count=practice_or_mock_review_count,
+            completed_session_count=completed_session_count,
+            abandoned_session_count=abandoned_session_count,
             last_active_at=latest_activity_at,
         )
 
@@ -140,11 +154,14 @@ def _build_subskill_state(
 def _build_trajectory_state(
     concept_state: dict[str, dict[str, Any]],
     subskill_state: dict[str, dict[str, Any]],
+    total_session_count: int,
     reviewed_session_count: int,
     practice_or_mock_review_count: int,
+    completed_session_count: int,
+    abandoned_session_count: int,
     last_active_at: str | None,
 ) -> dict[str, Any]:
-    if not concept_state:
+    if not concept_state and abandoned_session_count == 0:
         return {
             "recent_fatigue_signal": 0.0,
             "recent_abandonment_signal": 0.0,
@@ -156,9 +173,19 @@ def _build_trajectory_state(
     average_concept_proficiency = _average_from_state(concept_state, "proficiency_estimate")
     average_concept_confidence = _average_from_state(concept_state, "confidence")
     average_supported_subskills = _average_from_state(subskill_state, "proficiency_estimate")
+    abandonment_factor = 0.0
+    if total_session_count > 0:
+        abandonment_factor = min(1.0, abandoned_session_count / total_session_count)
+    completion_factor = 0.0
+    if total_session_count > 0:
+        completion_factor = min(1.0, completed_session_count / total_session_count)
     practice_factor = 0.0
     if reviewed_session_count > 0:
         practice_factor = min(1.0, practice_or_mock_review_count / reviewed_session_count)
+    recent_abandonment_signal = _clamp(0.7 * abandonment_factor)
+    recent_fatigue_signal = _clamp(
+        0.55 * abandonment_factor + 0.1 * (1.0 - completion_factor if total_session_count > 0 else 0.0)
+    )
 
     mock_readiness_estimate = _clamp(
         min(
@@ -178,9 +205,8 @@ def _build_trajectory_state(
     )
 
     return {
-        # These remain explicit zero baselines until runtime emits the needed events.
-        "recent_fatigue_signal": 0.0,
-        "recent_abandonment_signal": 0.0,
+        "recent_fatigue_signal": _round_metric(recent_fatigue_signal),
+        "recent_abandonment_signal": _round_metric(recent_abandonment_signal),
         "mock_readiness_estimate": _round_metric(mock_readiness_estimate),
         "mock_readiness_confidence": _round_metric(mock_readiness_confidence),
         "last_active_at": last_active_at,

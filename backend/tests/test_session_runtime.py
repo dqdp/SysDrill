@@ -204,6 +204,167 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         self.assertIn("last_evaluation_result", snapshot)
         self.assertIn("last_review_report", snapshot)
 
+    def test_complete_session_transitions_reviewed_session_and_preserves_review_access(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "Caching is storing frequently accessed data in a faster layer. "
+                "Use it for read-heavy paths. The trade-offs are stale data "
+                "and invalidation complexity."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        completed = self.runtime.complete_session(session["session_id"])
+        events = self.runtime.list_session_events(session["session_id"])
+        review = self.runtime.get_review(session["session_id"])
+
+        self.assertEqual(completed["state"], "completed")
+        self.assertEqual(events[-1]["event_type"], "session_completed")
+        self.assertEqual(
+            events[-1]["payload"]["completed_from_state"],
+            "review_presented",
+        )
+        self.assertEqual(review["session"]["state"], "completed")
+
+    def test_complete_session_fails_closed_outside_review_presented(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+
+        with self.assertRaisesRegex(SessionRuntimeInvalidStateError, "cannot complete"):
+            self.runtime.complete_session(session["session_id"])
+
+    def test_abandon_session_marks_in_flight_session_and_emits_event(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+
+        abandoned = self.runtime.abandon_session(
+            session["session_id"],
+            abandon_reason="explicit_exit",
+        )
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(abandoned["state"], "abandoned")
+        self.assertEqual(events[-1]["event_type"], "session_abandoned")
+        self.assertEqual(events[-1]["payload"]["abandon_reason"], "explicit_exit")
+        self.assertEqual(events[-1]["payload"]["abandoned_from_state"], "awaiting_answer")
+
+    def test_abandon_session_rejects_reviewed_session(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+        self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript=(
+                "Caching is storing frequently accessed data in a faster layer. "
+                "Use it for read-heavy paths. The trade-offs are stale data "
+                "and invalidation complexity."
+            ),
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        self.runtime.evaluate_pending_session(session["session_id"])
+
+        with self.assertRaisesRegex(SessionRuntimeInvalidStateError, "cannot abandon"):
+            self.runtime.abandon_session(session["session_id"])
+
+    def test_request_hint_is_repeatable_and_flows_into_evaluation_request(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+
+        first_hint = self.runtime.request_hint(
+            session["session_id"],
+            hint_level=1,
+            reason="need_more_guidance",
+        )
+        second_hint = self.runtime.request_hint(
+            session["session_id"],
+            hint_level=2,
+            reason="still_stuck",
+        )
+        submit_result = self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript="Caching reduces latency and load on the database.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(first_hint["state"], "awaiting_answer")
+        self.assertEqual(second_hint["hint_count_for_unit"], 2)
+        self.assertEqual(
+            [event["event_type"] for event in events].count("hint_requested"),
+            2,
+        )
+        self.assertEqual(
+            submit_result["evaluation_request"]["hint_usage_summary"],
+            {
+                "hint_count": 2,
+                "used_prior_hints": True,
+            },
+        )
+
+    def test_answer_reveal_sets_support_flag_for_later_evaluation(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Study",
+            session_intent="LearnNew",
+            unit_id=self.study_unit_id,
+        )
+
+        reveal_result = self.runtime.reveal_answer(
+            session["session_id"],
+            reveal_kind="canonical_answer",
+        )
+        submit_result = self.runtime.submit_answer(
+            session_id=session["session_id"],
+            transcript="Caching reduces latency and load on the database.",
+            response_modality="text",
+            submission_kind="manual_submit",
+        )
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(reveal_result["state"], "awaiting_answer")
+        self.assertEqual(events[-2]["event_type"], "answer_revealed")
+        self.assertTrue(submit_result["evaluation_request"]["answer_reveal_flag"])
+
+    def test_answer_reveal_rejects_units_that_do_not_allow_it(self):
+        session = self.runtime.start_manual_session(
+            user_id="user-1",
+            mode="Practice",
+            session_intent="Remediate",
+            unit_id=self.practice_unit_id,
+        )
+
+        with self.assertRaisesRegex(SessionRuntimeError, "answer reveal"):
+            self.runtime.reveal_answer(
+                session["session_id"],
+                reveal_kind="canonical_answer",
+            )
+
     def test_evaluate_pending_session_fails_closed_from_wrong_state(self):
         session = self.runtime.start_manual_session(
             user_id="user-1",
@@ -420,6 +581,13 @@ class SessionRuntimeServiceTest(unittest.TestCase):
         events = self.runtime.list_session_events(session["session_id"])
 
         self.assertEqual(result["session"]["state"], "review_presented")
+        self.assertEqual(events[-1]["event_type"], "review_presented")
+
+        completed = self.runtime.complete_session(session["session_id"])
+        events = self.runtime.list_session_events(session["session_id"])
+
+        self.assertEqual(completed["state"], "completed")
+        self.assertEqual(events[-2]["event_type"], "session_completed")
         self.assertEqual(events[-1]["event_type"], "recommendation_completed")
         self.assertEqual(events[-1]["payload"]["decision_id"], "rec.0001")
 
@@ -942,6 +1110,97 @@ class SessionRuntimeApiTest(unittest.TestCase):
         self.assertEqual(payload["session_id"], session_id)
         self.assertIn("evaluation_result", payload)
         self.assertIn("review_report", payload)
+
+    def test_complete_endpoint_transitions_reviewed_session(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "user-1",
+                "mode": "Study",
+                "session_intent": "LearnNew",
+                "unit_id": self.study_unit_id,
+            },
+        )
+        session_id = start_response.json()["session_id"]
+        self.client.post(
+            "/runtime/sessions/{0}/answer".format(session_id),
+            json={
+                "transcript": (
+                    "Caching is storing frequently accessed data in a faster layer. "
+                    "Use it for read-heavy paths. The trade-offs are stale data "
+                    "and invalidation complexity."
+                ),
+                "response_modality": "text",
+                "submission_kind": "manual_submit",
+            },
+        )
+        self.client.post("/runtime/sessions/{0}/evaluate".format(session_id))
+
+        response = self.client.post("/runtime/sessions/{0}/complete".format(session_id))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["state"], "completed")
+
+    def test_abandon_endpoint_marks_inflight_session(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "user-1",
+                "mode": "Study",
+                "session_intent": "LearnNew",
+                "unit_id": self.study_unit_id,
+            },
+        )
+        session_id = start_response.json()["session_id"]
+
+        response = self.client.post(
+            "/runtime/sessions/{0}/abandon".format(session_id),
+            json={"abandon_reason": "explicit_exit"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["state"], "abandoned")
+
+    def test_hint_endpoint_appends_support_event_without_changing_state(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "user-1",
+                "mode": "Study",
+                "session_intent": "LearnNew",
+                "unit_id": self.study_unit_id,
+            },
+        )
+        session_id = start_response.json()["session_id"]
+
+        response = self.client.post(
+            "/runtime/sessions/{0}/hint".format(session_id),
+            json={"hint_level": 1, "reason": "need_more_guidance"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["state"], "awaiting_answer")
+        self.assertEqual(response.json()["hint_count_for_unit"], 1)
+
+    def test_reveal_endpoint_rejects_disallowed_units(self):
+        start_response = self.client.post(
+            "/runtime/sessions/manual-start",
+            json={
+                "user_id": "user-1",
+                "mode": "Practice",
+                "session_intent": "Remediate",
+                "unit_id": "elu.concept_recall.practice.remediate.concept.alpha-topic",
+            },
+        )
+        session_id = start_response.json()["session_id"]
+
+        response = self.client.post(
+            "/runtime/sessions/{0}/reveal".format(session_id),
+            json={"reveal_kind": "canonical_answer"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("answer reveal", response.json()["detail"])
 
     def test_evaluate_endpoint_returns_409_from_wrong_state(self):
         start_response = self.client.post(

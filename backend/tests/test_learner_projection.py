@@ -358,6 +358,34 @@ class LearnerProjectorRuleTest(unittest.TestCase):
         self.assertLessEqual(profile["trajectory_state"]["mock_readiness_estimate"], 0.45)
         self.assertLessEqual(profile["trajectory_state"]["mock_readiness_confidence"], 0.35)
 
+    def test_abandonment_events_raise_trajectory_signals_without_claiming_knowledge_failure(self):
+        profile = self.projector.build_profile(
+            StubRuntimeReader(
+                [
+                    abandoned_session(
+                        session_id="session.0045",
+                        mode="Study",
+                        content_id="concept.alpha-topic",
+                        event_ids=["event.0045"],
+                    ),
+                ],
+                {
+                    "session.0045": session_events(
+                        session_id="session.0045",
+                        content_id="concept.alpha-topic",
+                        event_types=["session_abandoned"],
+                        occurred_at_values=["2026-03-18T11:05:00Z"],
+                        payloads=[{"abandon_reason": "explicit_exit"}],
+                    ),
+                },
+            ),
+            user_id="user-1",
+        )
+
+        self.assertEqual(profile["concept_state"], {})
+        self.assertGreater(profile["trajectory_state"]["recent_abandonment_signal"], 0.0)
+        self.assertGreater(profile["trajectory_state"]["recent_fatigue_signal"], 0.0)
+
     def test_profile_output_is_deterministic_and_uses_canonical_keys(self):
         session = reviewed_session(
             session_id="session.0050",
@@ -510,6 +538,35 @@ def reviewed_session(
     }
 
 
+def abandoned_session(
+    session_id: str,
+    mode: str,
+    content_id: str,
+    event_ids: list[str],
+) -> dict[str, Any]:
+    return {
+        "session_id": session_id,
+        "user_id": "user-1",
+        "mode": mode,
+        "session_intent": "LearnNew" if mode == "Study" else "Remediate",
+        "strictness_profile": "supportive" if mode == "Study" else "standard",
+        "state": "abandoned",
+        "planned_unit_ids": [
+            "elu.concept_recall.{0}.learn_new.{1}".format(mode.lower(), content_id)
+        ],
+        "current_unit": {
+            "id": "elu.concept_recall.{0}.learn_new.{1}".format(mode.lower(), content_id),
+            "source_content_ids": [content_id],
+            "evaluation_binding_id": "binding.concept_recall.v1",
+            "visible_prompt": "Explain it.",
+        },
+        "event_ids": list(event_ids),
+        "last_evaluation_result": None,
+        "last_review_report": None,
+        "recommendation_decision_id": None,
+    }
+
+
 def evaluation_result(
     session_id: str,
     weighted_score: float,
@@ -576,18 +633,25 @@ def session_events(
     session_id: str,
     content_id: str,
     occurred_at_values: list[str],
+    event_types: list[str] | None = None,
+    payloads: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    resolved_event_types = event_types or [
+        "review_presented" if index == len(occurred_at_values) - 1 else "session_started"
+        for index in range(len(occurred_at_values))
+    ]
+    resolved_payloads = payloads or [{} for _ in occurred_at_values]
     return [
         {
             "event_id": "event.{0}.{1}".format(session_id, index),
-            "event_type": "review_presented" if index == len(occurred_at_values) - 1 else "session_started",
+            "event_type": resolved_event_types[index],
             "user_id": "user-1",
             "session_id": session_id,
             "mode": "Study",
             "session_intent": "LearnNew",
             "content_id": content_id,
             "occurred_at": occurred_at,
-            "payload": {},
+            "payload": resolved_payloads[index],
             "source": "web",
             "trace_id": "trace.{0}".format(session_id),
         }
