@@ -358,6 +358,120 @@ describe("App", () => {
     ).toBeInTheDocument();
   });
 
+  it("runs the same bounded mock loop for a rate-limiter scenario", async () => {
+    fetchMock
+      .mockResolvedValueOnce(recommendationPayload("Start here."))
+      .mockResolvedValueOnce(manualLaunchOptionsPayload())
+      .mockResolvedValueOnce(learnerSummaryPayload())
+      .mockResolvedValueOnce(rateLimiterMockManualLaunchOptionsPayload())
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0101",
+          state: "awaiting_answer",
+          current_unit: {
+            id: "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.rate-limiter.basic",
+            visible_prompt:
+              "Design a Rate Limiter for a multi-tenant API where strict fairness matters more than occasional burst throughput.",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0101",
+          state: "follow_up_round",
+          current_unit: {
+            id: "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.rate-limiter.basic",
+            visible_prompt:
+              "What should happen if the limiter state store becomes stale or temporarily unavailable?",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0101",
+          state: "evaluation_pending",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          session_id: "session.0101",
+          state: "review_presented",
+          evaluation_result: {
+            evaluation_id: "evaluation.0101",
+            weighted_score: 0.61,
+            overall_confidence: 0.71,
+            missing_dimensions: ["reliability_awareness"],
+          },
+          review_report: {
+            strengths: ["The answer names a concrete rate-limiting algorithm."],
+            missed_dimensions: ["Reliability awareness"],
+            reasoning_gaps: ["Failure handling under stale shared state stays shallow."],
+            recommended_next_focus:
+              "Add the degraded behavior when limiter state is stale or unavailable.",
+            support_dependence_note: null,
+            follow_up_handling_note:
+              "Follow-up handling still needs a concrete degraded policy when limiter state is stale or unavailable.",
+          },
+        }),
+      );
+
+    render(<App />);
+
+    await screen.findByText("Start here.");
+
+    fireEvent.click(
+      await screen.findByRole("radio", {
+        name: /Mock Interview \/ Readiness Check/i,
+      }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Design a Rate Limiter for a multi-tenant API where strict fairness matters more than occasional burst throughput.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start session" }));
+
+    expect(
+      await screen.findByRole("textbox", { name: "Your answer" }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), {
+      target: {
+        value: "I would use shared counters and likely a token bucket.",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Request review" }));
+
+    expect(
+      await screen.findByText(
+        "What should happen if the limiter state store becomes stale or temporarily unavailable?",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Your answer" }), {
+      target: {
+        value:
+          "I would fail closed briefly and return a bounded error response if the shared state is stale.",
+      },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Request review" }));
+
+    expect(await screen.findByText("0.61")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Follow-up handling still needs a concrete degraded policy when limiter state is stale or unavailable.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Add the degraded behavior when limiter state is stale or unavailable.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("shows recommendation errors explicitly while leaving manual fallback visible", async () => {
     fetchMock
       .mockResolvedValueOnce(errorResponse(503, "runtime content is not configured"))
@@ -645,6 +759,49 @@ describe("App", () => {
     expect(calls.filter((url) => url.includes("/runtime/sessions/session.0044/answer"))).toHaveLength(0);
     expect(calls.filter((url) => url.includes("/runtime/sessions/session.0044/evaluate"))).toHaveLength(0);
     expect(calls.filter((url) => url.includes("/runtime/sessions/session.0044/review"))).toHaveLength(1);
+  });
+
+  it("restores a reviewed rate-limiter mock session without family-specific assumptions", async () => {
+    setStoredSessionEnvelope({
+      sessionId: "session.0046",
+      transcript: "Previously submitted mock answer.",
+      answerSubmitted: true,
+    });
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          runtimeSessionSnapshot({
+            session_id: "session.0046",
+            state: "review_presented",
+            mode: "MockInterview",
+            session_intent: "ReadinessCheck",
+            current_unit: {
+              id: "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.rate-limiter.basic",
+              visible_prompt:
+                "Design a Rate Limiter for a multi-tenant API where strict fairness matters more than occasional burst throughput.",
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(reviewPayload("session.0046"));
+
+    render(<App />);
+
+    expect(await screen.findByText("Weighted score")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "Mock Interview / Readiness Check",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Design a URL Shortener"),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem(SESSION_RESUME_STORAGE_KEY)).not.toBeNull();
+
+    const calls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(calls.filter((url) => url.includes("/runtime/sessions/session.0046/answer"))).toHaveLength(0);
+    expect(calls.filter((url) => url.includes("/runtime/sessions/session.0046/evaluate"))).toHaveLength(0);
+    expect(calls.filter((url) => url.includes("/runtime/sessions/session.0046/review"))).toHaveLength(1);
   });
 
   it("clears a stale stored session and returns to the launcher", async () => {
@@ -1347,6 +1504,25 @@ function mockManualLaunchOptionsPayload(): Response {
         display_title: "Design a URL Shortener",
         visible_prompt:
           "Design a URL Shortener for a read-heavy product with high availability requirements.",
+        effective_difficulty: "standard",
+      },
+    ],
+  });
+}
+
+function rateLimiterMockManualLaunchOptionsPayload(): Response {
+  return jsonResponse({
+    mode: "MockInterview",
+    session_intent: "ReadinessCheck",
+    items: [
+      {
+        unit_id:
+          "elu.scenario_readiness_check.mock_interview.readiness_check.scenario.rate-limiter.basic",
+        content_id: "scenario.rate-limiter.basic",
+        topic_slug: "rate-limiter",
+        display_title: "Design a Rate Limiter",
+        visible_prompt:
+          "Design a Rate Limiter for a multi-tenant API where strict fairness matters more than occasional burst throughput.",
         effective_difficulty: "standard",
       },
     ],

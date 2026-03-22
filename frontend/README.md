@@ -17,9 +17,11 @@ The current shell is intentionally narrow:
 - submit one answer
 - request evaluation
 - display the resulting review
+- run a bounded mock/readiness loop through `MockInterview / ReadinessCheck`
+  with one backend-provided follow-up probe
 
-It does not implement learner dashboards, scenario/mock flows, or durable
-cross-device resume.
+It does not implement learner dashboards, richer multi-turn mock orchestration,
+or durable cross-device resume.
 
 ## Persistence boundary
 
@@ -31,6 +33,16 @@ This persistence is browser-local only and exists to make page refresh/reload
 safe within the same browser profile. It is temporary implementation scaffolding
 rather than a durable product contract: backend restarts, other browsers, and
 other devices are not expected to recover this state.
+
+## Mock boundary
+
+The current mock support is intentionally bounded:
+- the shell supports backend-driven `MockInterview / ReadinessCheck` sessions
+- the backend owns scenario family, prompt, follow-up, evaluation, and review
+  semantics
+- the frontend should remain family-agnostic and render whichever bounded
+  scenario family the backend exposes
+- this is not a full interviewer UI or an open-ended multi-turn mock system
 
 ## Local run
 
